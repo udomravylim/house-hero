@@ -1,2 +1,2 @@
 signup work
- <a href="/task">go to task</a>
+ <a href="/tasks">go to task</a>
