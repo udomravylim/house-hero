@@ -1,3 +1,5 @@
+signup work
+ <a href="/tasks">go to task</a>
 <script>
   import { supabase } from '$lib/supabase.js';
   import { goto } from '$app/navigation';
