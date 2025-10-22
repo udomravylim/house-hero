@@ -1,9 +1,11 @@
 <script>
   import TaskItem from '$lib/components/TaskItem.svelte';
   import homeIcon from '$lib/assets/menu-icon-home.svg';
+  import addIcon from '$lib/assets/menu-icon-add.svg';
   import medalIcon from '$lib/assets/menu-icon-medal.svg';
   import noteIcon from '$lib/assets/menu-icon-note.svg';
   import profileIcon from '$lib/assets/menu-icon-profile.svg';
+  import liladdIcon from '$lib/assets/add-icon.svg';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
@@ -116,9 +118,9 @@
       <button class:active={view === 'unassigned'} on:click={() => (view = 'unassigned')}>Unassigned</button>
     </div>
 
-    <button class="add-icon" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task">
+    <!-- <div class="add-icon" on:click={() => (showAdd = !showAdd)}>
       <div class="plus">+</div>
-    </button>
+    </div> -->
   </section>
 
   {#if showAdd}
@@ -161,12 +163,12 @@
       {/each}
     {/if}
   </section>
-
   <nav class="bottom-nav">
-    <button type="button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
-    <button class="fab" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task">+</button>
-    <button type="button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
-    <button type="button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
+    <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
+    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/tasks')}><img src={profileIcon} alt="Profile"/></button>
+    <button class="fab, nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
+    <button type="button" class="nav-button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
+    <button type="button" class="nav-button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
   </nav>
 </main>
 
@@ -202,13 +204,14 @@
     background: black;
     color: white;
   }
-  .add-icon {
+  .nav-button {
     background: none;
     border: none;
+    padding: 6px 12px;
+    border-radius: 999px;
     cursor: pointer;
-    padding: 0;
   }
-  .add-icon .plus {
+  /*.add-icon .plus {
     width: 36px;
     height: 36px;
     border: 2px solid #000;
@@ -217,7 +220,7 @@
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
-  }
+  }*/
   .add-form {
     margin: 10px 0;
     display: flex;
@@ -270,6 +273,8 @@
     text-align: center;
   }
   .bottom-nav {
+    max-width: 420px;
+    margin: 0 auto;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -280,7 +285,7 @@
     align-items: center;
     justify-content: space-around;
   }
-  .fab {
+  /*.fab {
     width: 64px;
     height: 64px;
     border-radius: 50%;
@@ -291,16 +296,5 @@
     margin-top: -28px;
     font-size: 1.8rem;
     cursor: pointer;
-    border: none;
-  }
-  .bottom-nav button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 8px;
-  }
-  .bottom-nav button img {
-    width: 24px;
-    height: 24px;
-  }
+  } */
 </style>
