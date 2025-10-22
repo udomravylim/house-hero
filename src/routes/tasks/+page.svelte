@@ -1,10 +1,10 @@
 <script>
   import TaskItem from '$lib/components/TaskItem.svelte';
   import homeIcon from '$lib/assets/menu-icon-home.svg';
-  import addIcon from '$lib/assets/menu-add-home.svg';
-  import medalIcon from '$lib/assets/menu-medal-home.svg';
-  import noteIcon from '$lib/assets/menu-note-home.svg';
-  import profileIcon from '$lib/assets/menu-profile-home.svg';
+  import addIcon from '$lib/assets/menu-icon-add.svg';
+  import medalIcon from '$lib/assets/menu-icon-medal.svg';
+  import noteIcon from '$lib/assets/menu-icon-note.svg';
+  import profileIcon from '$lib/assets/menu-icon-profile.svg';
   import liladdIcon from '$lib/assets/add-icon.svg';
 
   let view = 'yours';
@@ -67,9 +67,9 @@
       <button class:active={view === 'unassigned'} on:click={() => (view = 'unassigned')}>Unassigned</button>
     </div>
 
-    <div class="add-icon" on:click={() => (showAdd = !showAdd)}>
+    <!-- <div class="add-icon" on:click={() => (showAdd = !showAdd)}>
       <div class="plus">+</div>
-    </div>
+    </div> -->
   </section>
 
   {#if showAdd}
@@ -89,10 +89,10 @@
 
   <nav class="bottom-nav">
     <div><img src={homeIcon} alt="Filter"/></div>
-    <div>🏠</div>
-    <div class="fab" on:click={() => (showAdd = !showAdd)}>+</div>
-    <div>✏️</div>
-    <div>⏳</div>
+    <div><img src={profileIcon} alt="Filter"/></div>
+    <div><img src={addIcon} alt="Filter"/></div>
+    <div><img src={noteIcon} alt="Filter"/></div>
+    <div><img src={medalIcon} alt="Filter"/></div>
   </nav>
 </main>
 
@@ -128,7 +128,7 @@
     background: black;
     color: white;
   }
-  .add-icon .plus {
+  /*.add-icon .plus {
     width: 36px;
     height: 36px;
     border: 2px solid #000;
@@ -137,7 +137,7 @@
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
-  }
+  }*/
   .add-form {
     margin: 10px 0;
     display: flex;
@@ -156,6 +156,8 @@
     margin-top: 8px;
   }
   .bottom-nav {
+    max-width: 420px;
+    margin: 0 auto;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -166,7 +168,7 @@
     align-items: center;
     justify-content: space-around;
   }
-  .fab {
+  /*.fab {
     width: 64px;
     height: 64px;
     border-radius: 50%;
@@ -177,5 +179,5 @@
     margin-top: -28px;
     font-size: 1.8rem;
     cursor: pointer;
-  }
+  } */
 </style>
