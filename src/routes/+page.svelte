@@ -26,7 +26,6 @@
       if (signInError) {
         error = signInError.message;
       } else {
-        alert('Login successful!');
         goto('/tasks');
       }
     } catch (err) {
