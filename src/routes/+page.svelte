@@ -1,11 +1,25 @@
 <script>
   import { supabase } from '$lib/supabase.js';
   import { goto } from '$app/navigation';
+  import { user } from '$lib/stores/user.js';
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   
   let email = '';
   let password = '';
   let loading = false;
   let error = '';
+  let redirectMessage = '';
+
+  // Check for redirect message
+  $: if ($page.url.searchParams.get('message') === 'login-required') {
+    redirectMessage = 'You need to login or create an account to view the tasks page.';
+  }
+
+  // Redirect authenticated users to tasks page
+  $: if ($user) {
+    goto('/tasks');
+  }
   
   async function handleLogin() {
     // Basic form validation
@@ -38,6 +52,12 @@
 </script>
 
 <h1>Login</h1>
+
+{#if redirectMessage}
+  <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #ffeaa7;">
+    {redirectMessage}
+  </div>
+{/if}
 
 {#if error}
   <div style="color: red; margin-bottom: 10px;">
@@ -76,8 +96,4 @@
 <div>
   <p>Don't have an account?</p>
   <a href="/sign-up">Sign Up</a>
-</div>
-
-<div>
-  <a href="/tasks">Go to Tasks</a>
 </div>

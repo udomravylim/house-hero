@@ -5,6 +5,7 @@
   export let task;
 
   let isEditing = false;
+  let showDetails = false;
   let editTitle = '';
   let editDescription = '';
   let editDueDate = '';
@@ -58,6 +59,14 @@
     if (!dateString) return '';
     return new Date(dateString).toLocaleDateString('en-US');
   }
+
+  function toggleDetails() {
+    showDetails = !showDetails;
+  }
+
+  function closeDetails() {
+    showDetails = false;
+  }
 </script>
 
 <article class="task {task.completed ? 'done' : ''} {editPriority}">
@@ -100,7 +109,7 @@
       <input type="checkbox" checked={task.completed} on:change={toggleDone} />
     </label>
 
-    <div class="content">
+    <div class="content" on:click={toggleDetails} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && toggleDetails()}>
       <div class="title">{task.title}</div>
       {#if task.description}
         <div class="description">{task.description}</div>
@@ -120,6 +129,91 @@
     </div>
   {/if}
 </article>
+
+{#if showDetails}
+  <div class="modal-overlay" on:click={closeDetails} on:keydown={(e) => e.key === 'Escape' && closeDetails()} role="button" tabindex="0">
+    <div class="modal-content" on:click|stopPropagation on:keydown={(e) => e.key === 'Escape' && closeDetails()} role="dialog" aria-labelledby="modal-title" aria-modal="true" tabindex="0">
+      <div class="modal-header">
+        <h3 id="modal-title">Task Details</h3>
+        <button class="close-btn" on:click={closeDetails} title="Close">×</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="detail-section">
+          <h4>Title</h4>
+          <p class="detail-value">{task.title}</p>
+        </div>
+        
+        {#if task.description}
+          <div class="detail-section">
+            <h4>Description</h4>
+            <p class="detail-value">{task.description}</p>
+          </div>
+        {/if}
+        
+        <div class="detail-section">
+          <h4>Status</h4>
+          <p class="detail-value">
+            <span class="status {task.completed ? 'completed' : 'pending'}">
+              {task.completed ? 'Completed' : 'Pending'}
+            </span>
+          </p>
+        </div>
+        
+        <div class="detail-section">
+          <h4>Priority</h4>
+          <p class="detail-value">
+            <span class="priority {task.priority}">{task.priority}</span>
+          </p>
+        </div>
+        
+        {#if task.due_date}
+          <div class="detail-section">
+            <h4>Due Date</h4>
+            <p class="detail-value">{formatDate(task.due_date)}</p>
+          </div>
+        {/if}
+        
+        <div class="detail-section">
+          <h4>Assignee</h4>
+          <p class="detail-value">
+            <span class="assignee">
+              <span class="assignee-avatar">{task.assignee_initial}</span>
+              {task.assignee_name || task.assignee_email}
+            </span>
+          </p>
+        </div>
+        
+        <div class="detail-section">
+          <h4>Created By</h4>
+          <p class="detail-value">
+            <span class="creator">
+              <span class="creator-avatar">{task.created_by_name ? task.created_by_name.charAt(0).toUpperCase() : task.created_by.charAt(0).toUpperCase()}</span>
+              {task.created_by_name || task.created_by}
+            </span>
+          </p>
+        </div>
+        
+        <div class="detail-section">
+          <h4>Created</h4>
+          <p class="detail-value">{formatDate(task.created_at)}</p>
+        </div>
+        
+        {#if task.updated_at && task.updated_at !== task.created_at}
+          <div class="detail-section">
+            <h4>Last Updated</h4>
+            <p class="detail-value">{formatDate(task.updated_at)}</p>
+          </div>
+        {/if}
+      </div>
+      
+      <div class="modal-footer">
+        <button class="edit-btn" on:click={() => { closeDetails(); startEdit(); }}>Edit Task</button>
+        <button class="close-btn-secondary" on:click={closeDetails}>Close</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .task {
@@ -154,6 +248,14 @@
   }
   .content {
     flex: 1;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .content:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    padding: 4px;
+    margin: -4px;
   }
   .title {
     font-weight: 700;
@@ -273,5 +375,164 @@
   }
   .cancel-btn:hover {
     background: #7f8c8d;
+  }
+
+  /* Modal Styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.15s;
+  }
+
+  .close-btn:hover {
+    background-color: #f3f4f6;
+  }
+
+  .modal-body {
+    padding: 24px;
+  }
+
+  .detail-section {
+    margin-bottom: 20px;
+  }
+
+  .detail-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .detail-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .detail-value {
+    margin: 0;
+    font-size: 1rem;
+    color: #111827;
+    line-height: 1.5;
+  }
+
+  .status {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status.completed {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .status.pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .assignee, .creator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .assignee-avatar, .creator-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e24a2c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.75rem;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 20px 24px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .modal-footer .edit-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.15s;
+  }
+
+  .modal-footer .edit-btn:hover {
+    background: #2563eb;
+  }
+
+  .close-btn-secondary {
+    background: #6b7280;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.15s;
+  }
+
+  .close-btn-secondary:hover {
+    background: #4b5563;
   }
 </style>

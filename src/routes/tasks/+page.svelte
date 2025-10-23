@@ -10,6 +10,7 @@
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { supabase } from '$lib/supabase.js';
 
   let view = 'yours';
   let showAdd = false;
@@ -20,21 +21,48 @@
   let newPriority = 'medium';
   let availableUsers = [];
 
+  let authChecked = false;
+
   onMount(async () => {
+    // Wait for auth to initialize
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Check if user is authenticated
+    if (!$user) {
+      goto('/?message=login-required');
+      return;
+    }
+    
+    authChecked = true;
     await fetchTasks();
     availableUsers = await getUsers();
   });
+
+  // Handle authentication changes only after initial check
+  $: if (authChecked && typeof window !== 'undefined' && $user === null) {
+    goto('/?message=login-required');
+  }
 
   function filteredTasks() {
     const currentUser = $user?.email;
     if (!currentUser) return [];
     
-    return $tasks.filter((task) => {
+    const filtered = $tasks.filter((task) => {
       if (view === 'yours') {
         return task.assignee_email === currentUser;
       } else {
         return task.assignee_email === 'unassigned' || !task.assignee_email;
       }
+    });
+    
+    // Sort tasks: incomplete first, then completed (like Google Keep)
+    return filtered.sort((a, b) => {
+      // If both have same completion status, maintain original order
+      if (a.completed === b.completed) {
+        return 0;
+      }
+      // Incomplete tasks come first (false < true)
+      return a.completed - b.completed;
     });
   }
 
@@ -95,11 +123,28 @@
     if (!dateString) return '';
     return new Date(dateString).toLocaleDateString('en-US');
   }
+
+  async function handleLogout() {
+    try {
+      await supabase.auth.signOut();
+      goto('/');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  }
 </script>
 
 <main>
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
+    <button class="logout-btn" on:click={handleLogout} title="Logout">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16,17 21,12 16,7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      Logout
+    </button>
   </header>
 
   <section class="controls">
@@ -178,10 +223,43 @@
     margin: 0 auto;
     padding: 28px 20px 100px;
   }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  
   h1 {
     font-size: 32px;
     font-weight: 800;
-    margin-bottom: 18px;
+    margin: 0;
+  }
+  
+  .logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  
+  .logout-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
+  }
+  
+  .logout-btn svg {
+    width: 16px;
+    height: 16px;
   }
   .controls {
     display: flex;
