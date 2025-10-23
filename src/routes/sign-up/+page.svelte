@@ -51,7 +51,7 @@
     {/if}
 
     <label for="email">Email</label>
-    <input id="email" type="email" bind:value={email} placeholder="Placeholder" required disabled={loading} />
+    <input id="email" type="email" bind:value={email} placeholder="Type email" required disabled={loading} />
 
     <label for="password">Password</label>
     <input id="password" type="password" bind:value={password} placeholder="Placeholder" required disabled={loading} />
