@@ -57,18 +57,20 @@
   <!-- Logo -->
   <div class="logo-section">
     <img src={logo} alt="House Hero Logo" class="logo" />
-<h1>Login</h1>
-
-{#if redirectMessage}
-  <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #ffeaa7;">
-    {redirectMessage}
+    <h1>Login</h1>
   </div>
-{/if}
 
-{#if error}
-  <div style="color: red; margin-bottom: 10px;">
-    {error}
-  </div>
+  {#if redirectMessage}
+    <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #ffeaa7;">
+      {redirectMessage}
+    </div>
+  {/if}
+
+  {#if error}
+    <div style="color: red; margin-bottom: 10px;">
+      {error}
+    </div>
+  {/if}
 
   <!-- Form -->
   <form class="login-form" on:submit|preventDefault={handleLogin}>
@@ -105,8 +107,6 @@
   <div class="footer-links">
     <p>Don’t have an account?</p>
     <a href="/sign-up" class="signup-link">Sign Up</a>
-
-    <a href="/tasks" class="tasks-link">Go to Tasks</a>
   </div>
 </div>
 
@@ -169,8 +169,8 @@
   }
 
   input::placeholder {
-  font-style: italic;
-  color: rgba(0, 0, 0, 0.6); /* optional: makes it slightly softer */
+    font-style: italic;
+    color: rgba(0, 0, 0, 0.6);
   }
 
   .login-btn {
@@ -235,13 +235,3 @@
     text-decoration: underline;
   }
 </style>
-  
-  <button type="submit" disabled={loading}>
-    {loading ? 'Logging in...' : 'Login'}
-  </button>
-</form>
-
-<div>
-  <p>Don't have an account?</p>
-  <a href="/sign-up">Sign Up</a>
-</div>
