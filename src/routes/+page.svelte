@@ -3,11 +3,27 @@
   import { goto } from '$app/navigation';
   import logo from '$lib/assets/house-hero-all-white.png';
 
+  import { user } from '$lib/stores/user.js';
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  
   let email = '';
   let password = '';
   let loading = false;
   let error = '';
 
+  let redirectMessage = '';
+
+  // Check for redirect message
+  $: if ($page.url.searchParams.get('message') === 'login-required') {
+    redirectMessage = 'You need to login or create an account to view the tasks page.';
+  }
+
+  // Redirect authenticated users to tasks page
+  $: if ($user) {
+    goto('/tasks');
+  }
+  
   async function handleLogin() {
     if (!email || !password) {
       error = 'Please fill in all fields';
@@ -41,6 +57,17 @@
   <!-- Logo -->
   <div class="logo-section">
     <img src={logo} alt="House Hero Logo" class="logo" />
+<h1>Login</h1>
+
+{#if redirectMessage}
+  <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #ffeaa7;">
+    {redirectMessage}
+  </div>
+{/if}
+
+{#if error}
+  <div style="color: red; margin-bottom: 10px;">
+    {error}
   </div>
 
   <!-- Form -->
@@ -208,3 +235,13 @@
     text-decoration: underline;
   }
 </style>
+  
+  <button type="submit" disabled={loading}>
+    {loading ? 'Logging in...' : 'Login'}
+  </button>
+</form>
+
+<div>
+  <p>Don't have an account?</p>
+  <a href="/sign-up">Sign Up</a>
+</div>
