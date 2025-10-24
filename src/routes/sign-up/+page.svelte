@@ -49,15 +49,17 @@
     {#if error}
       <div class="error-message">{error}</div>
     {/if}
+    <label for="fullName">Full Name</label>
+    <input id="fullName" type="text" bind:value={fullName} placeholder="Enter Name" required disabled={loading} />
 
     <label for="email">Email</label>
-    <input id="email" type="email" bind:value={email} placeholder="Type email" required disabled={loading} />
+    <input id="email" type="email" bind:value={email} placeholder="Enter Email" required disabled={loading} />
 
     <label for="password">Password</label>
-    <input id="password" type="password" bind:value={password} placeholder="Placeholder" required disabled={loading} />
+    <input id="password" type="password" bind:value={password} placeholder="Create Password" required disabled={loading} />
 
-    <label for="fullName">Full Name</label>
-    <input id="fullName" type="text" bind:value={fullName} placeholder="Placeholder" required disabled={loading} />
+    <label for="password">Confirm Password</label>
+    <input id="password" type="password" bind:value={password} placeholder="Confirm Password" required disabled={loading} />
 
     <button type="submit" class="login-btn" disabled={loading}>
       {loading ? 'Signing Up...' : 'Create Account'}
