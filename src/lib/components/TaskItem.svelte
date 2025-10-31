@@ -3,6 +3,8 @@
   const dispatch = createEventDispatcher();
 
   export let task;
+  export let availableUsers = [];
+  export let currentUserEmail = '';
 
   let isEditing = false;
   let showDetails = false;
@@ -21,7 +23,8 @@
     editTitle = task.title;
     editDescription = task.description || '';
     editDueDate = task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '';
-    editAssignee = task.assignee_email || '';
+    // If assignee is current user, set to empty string so "Assign to me" is selected
+    editAssignee = (task.assignee_email === currentUserEmail) ? '' : (task.assignee_email || '');
     editPriority = task.priority || 'medium';
   }
 
@@ -88,12 +91,12 @@
         bind:value={editDueDate}
         class="edit-input"
       />
-      <input 
-        type="email" 
-        bind:value={editAssignee} 
-        placeholder="Assignee email"
-        class="edit-input"
-      />
+      <select bind:value={editAssignee} class="edit-select">
+        <option value="">Assign to me</option>
+        {#each availableUsers as user}
+          <option value={user.email}>Assign to {user.name}</option>
+        {/each}
+      </select>
       <select bind:value={editPriority} class="edit-select">
         <option value="low">Low Priority</option>
         <option value="medium">Medium Priority</option>

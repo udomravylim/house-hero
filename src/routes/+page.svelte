@@ -4,7 +4,6 @@
   import logo from '$lib/assets/house-hero-all-white.png';
 
   import { user } from '$lib/stores/user.js';
-  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   
   let email = '';
@@ -66,12 +65,6 @@
     </div>
   {/if}
 
-  {#if error}
-    <div style="color: red; margin-bottom: 10px;">
-      {error}
-    </div>
-  {/if}
-
   <!-- Form -->
   <form class="login-form" on:submit|preventDefault={handleLogin}>
     {#if error}
@@ -102,7 +95,7 @@
       {loading ? 'Logging in...' : 'Login'}
     </button>
   </form>
-
+<p><a href="/test">test</a></p>
   <!-- Footer Links -->
   <div class="footer-links">
     <p>Don’t have an account?</p>
@@ -223,17 +216,5 @@
 
   .signup-link:hover {
     background-color: #f5f5f5;
-  }
-
-  .tasks-link {
-    display: block;
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: #0d0d0d;
-    text-decoration: none;
-  }
-
-  .tasks-link:hover {
-    text-decoration: underline;
   }
 </style>
