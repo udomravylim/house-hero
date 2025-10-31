@@ -5,14 +5,13 @@
   import medalIcon from '$lib/assets/menu-icon-medal.svg';
   import noteIcon from '$lib/assets/menu-icon-note.svg';
   import profileIcon from '$lib/assets/menu-icon-profile.svg';
-  import liladdIcon from '$lib/assets/add-icon.svg';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase.js';
 
-  let view = 'yours';
+  let view = 'all';
   let showAdd = false;
   let newTitle = '';
   let newDescription = '';
@@ -33,6 +32,21 @@
       return;
     }
     
+    // Check if user is in a household
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      const { data: householdMembership } = await supabase
+        .from('household_members')
+        .select('household_id')
+        .eq('user_id', currentUser.id)
+        .single();
+      
+      if (!householdMembership) {
+        goto('/join-household');
+        return;
+      }
+    }
+    
     authChecked = true;
     await fetchTasks();
     availableUsers = await getUsers();
@@ -47,12 +61,19 @@
     const currentUser = $user?.email;
     if (!currentUser) return [];
     
+    // Filter tasks based on view
     const filtered = $tasks.filter((task) => {
-      if (view === 'yours') {
+      if (view === 'all') {
+        // Show all tasks in the household
+        return true;
+      } else if (view === 'mine') {
+        // Show only tasks assigned to current user
         return task.assignee_email === currentUser;
-      } else {
+      } else if (view === 'unassigned') {
+        // Show only unassigned tasks
         return task.assignee_email === 'unassigned' || !task.assignee_email;
       }
+      return true;
     });
     
     // Sort tasks: incomplete first, then completed (like Google Keep)
@@ -119,11 +140,6 @@
     }
   }
 
-  function formatDate(dateString) {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US');
-  }
-
   async function handleLogout() {
     try {
       await supabase.auth.signOut();
@@ -159,13 +175,11 @@
     </div>
 
     <div class="tabs">
-      <button class:active={view === 'yours'} on:click={() => (view = 'yours')}>Yours</button>
+      <button class:active={view === 'all'} on:click={() => (view = 'all')}>All</button>
+      <button class:active={view === 'mine'} on:click={() => (view = 'mine')}>Assigned to Me</button>
       <button class:active={view === 'unassigned'} on:click={() => (view = 'unassigned')}>Unassigned</button>
     </div>
 
-    <!-- <div class="add-icon" on:click={() => (showAdd = !showAdd)}>
-      <div class="plus">+</div>
-    </div> -->
   </section>
 
   {#if showAdd}
@@ -176,7 +190,7 @@
       <select bind:value={newAssignee}>
         <option value="">Assign to me</option>
         {#each availableUsers as user}
-          <option value={user.email}>{user.name} ({user.email})</option>
+          <option value={user.email}>Assign to {user.name}</option>
         {/each}
       </select>
       <select bind:value={newPriority}>
@@ -204,14 +218,14 @@
       </div>
     {:else}
       {#each filteredTasks() as task (task.id)}
-        <TaskItem {task} on:toggle={handleToggle} on:edit={handleEdit} on:delete={handleDelete} />
+        <TaskItem {task} {availableUsers} currentUserEmail={$user?.email} on:toggle={handleToggle} on:edit={handleEdit} on:delete={handleDelete} />
       {/each}
     {/if}
   </section>
   <nav class="bottom-nav">
     <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
     <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/tasks')}><img src={profileIcon} alt="Profile"/></button>
-    <button class="fab, nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
+    <button class="nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
     <button type="button" class="nav-button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
     <button type="button" class="nav-button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
   </nav>
@@ -289,16 +303,6 @@
     border-radius: 999px;
     cursor: pointer;
   }
-  /*.add-icon .plus {
-    width: 36px;
-    height: 36px;
-    border: 2px solid #000;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-  }*/
   .add-form {
     margin: 10px 0;
     display: flex;
@@ -363,16 +367,4 @@
     align-items: center;
     justify-content: space-around;
   }
-  /*.fab {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: -28px;
-    font-size: 1.8rem;
-    cursor: pointer;
-  } */
 </style>
