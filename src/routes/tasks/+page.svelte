@@ -224,9 +224,9 @@
   </section>
   <nav class="bottom-nav">
     <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
-    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/tasks')}><img src={profileIcon} alt="Profile"/></button>
-    <button class="fab, nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
-    <button type="button" class="nav-button" aria-label="Notes" on:click={() => goto('/notes')}><img src={noteIcon} alt="Notes"/></button>
+    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/profile')}><img src={profileIcon} alt="Profile"/></button>
+    <button class="fab nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
+    <button type="button" class="nav-button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
     <button type="button" class="nav-button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
   </nav>
 </main>
