@@ -6,7 +6,7 @@ export const tasks = writable([]);
 export const loading = writable(false);
 export const error = writable(null);
 
-// Get all tasks for the current user
+// Get all tasks for the current user's household
 export async function fetchTasks() {
   loading.set(true);
   error.set(null);
@@ -18,10 +18,23 @@ export async function fetchTasks() {
       return;
     }
 
+    // Get user's household
+    const { data: householdMember } = await supabase
+      .from('household_members')
+      .select('household_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!householdMember) {
+      tasks.set([]);
+      return;
+    }
+
+    // Fetch tasks for the household
     const { data, error: fetchError } = await supabase
       .from('tasks')
       .select('*')
-      .or(`assignee_email.eq.${user.email},created_by.eq.${user.email}`)
+      .eq('household_id', householdMember.household_id)
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -49,6 +62,18 @@ export async function createTask(taskData) {
       return null;
     }
 
+    // Get user's household
+    const { data: householdMember } = await supabase
+      .from('household_members')
+      .select('household_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!householdMember) {
+      error.set('User is not in a household');
+      return null;
+    }
+
     // Get user's display name for initial
     const userName = user.user_metadata?.full_name || user.email.split('@')[0];
     const userInitial = userName.charAt(0).toUpperCase();
@@ -64,7 +89,8 @@ export async function createTask(taskData) {
         assignee_name: taskData.assignee_name || userName,
         created_by: user.email,
         created_by_name: userName,
-        priority: taskData.priority || 'medium'
+        priority: taskData.priority || 'medium',
+        household_id: householdMember.household_id
       }])
       .select()
       .single();
@@ -96,6 +122,44 @@ export async function updateTask(taskId, updates) {
     if (!user) {
       error.set('User not authenticated');
       return null;
+    }
+
+    // If assignee_email is being updated, also update assignee_name and assignee_initial
+    if (updates.assignee_email !== undefined) {
+      // Get household members to find assignee info
+      const { data: householdMember } = await supabase
+        .from('household_members')
+        .select('household_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (householdMember) {
+        // If empty string, assign to current user
+        if (!updates.assignee_email || updates.assignee_email === '') {
+          updates.assignee_email = user.email;
+          const userName = user.user_metadata?.full_name || user.email.split('@')[0];
+          updates.assignee_name = userName;
+          updates.assignee_initial = userName.charAt(0).toUpperCase();
+        } else if (updates.assignee_email !== 'unassigned') {
+          // Find the assignee member info
+          const { data: assigneeMember } = await supabase
+            .from('household_members')
+            .select('user_email, user_name')
+            .eq('household_id', householdMember.household_id)
+            .eq('user_email', updates.assignee_email)
+            .single();
+
+          if (assigneeMember) {
+            const assigneeName = assigneeMember.user_name || updates.assignee_email.split('@')[0];
+            updates.assignee_name = assigneeName;
+            updates.assignee_initial = assigneeName.charAt(0).toUpperCase();
+          }
+        } else {
+          // Unassigned
+          updates.assignee_name = null;
+          updates.assignee_initial = null;
+        }
+      }
     }
 
     const { data, error: updateError } = await supabase
@@ -170,7 +234,7 @@ export async function toggleTaskCompletion(taskId, completed) {
   return await updateTask(taskId, { completed });
 }
 
-// Get all users (for assignment dropdown)
+// Get all users from the household (for assignment dropdown)
 export async function getUsers() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -178,34 +242,35 @@ export async function getUsers() {
       return [];
     }
 
-    // Get all unique users from tasks
-    const { data: tasksData } = await supabase
-      .from('tasks')
-      .select('assignee_email, assignee_initial, assignee_name, created_by, created_by_name')
-      .or(`assignee_email.eq.${user.email},created_by.eq.${user.email}`);
+    // Get user's household
+    const { data: householdMember } = await supabase
+      .from('household_members')
+      .select('household_id')
+      .eq('user_id', user.id)
+      .single();
 
-    if (!tasksData) return [];
+    if (!householdMember) {
+      return [];
+    }
 
-    // Create unique users list
-    const users = new Map();
-    tasksData.forEach(task => {
-      if (task.assignee_email && task.assignee_email !== 'unassigned') {
-        users.set(task.assignee_email, {
-          email: task.assignee_email,
-          initial: task.assignee_initial,
-          name: task.assignee_name || task.assignee_email.split('@')[0]
-        });
-      }
-      if (task.created_by) {
-        users.set(task.created_by, {
-          email: task.created_by,
-          initial: task.created_by_name ? task.created_by_name.charAt(0).toUpperCase() : task.created_by.charAt(0).toUpperCase(),
-          name: task.created_by_name || task.created_by.split('@')[0]
-        });
-      }
-    });
+    // Get all members of the same household
+    const { data: householdMembers, error } = await supabase
+      .from('household_members')
+      .select('user_email, user_name, user_id')
+      .eq('household_id', householdMember.household_id);
 
-    return Array.from(users.values());
+    if (error || !householdMembers) {
+      return [];
+    }
+
+    // Return the household members as a list of users, excluding current user
+    return householdMembers
+      .filter(member => member.user_id !== user.id)
+      .map(member => ({
+        email: member.user_email,
+        name: member.user_name || member.user_email.split('@')[0],
+        initial: (member.user_name || member.user_email.split('@')[0]).charAt(0).toUpperCase()
+      }));
   } catch (err) {
     console.error('Error fetching users:', err);
     return [];
