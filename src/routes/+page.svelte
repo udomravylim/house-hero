@@ -4,7 +4,6 @@
   import logo from '$lib/assets/house-hero-all-white.png';
 
   import { user } from '$lib/stores/user.js';
-  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   
   let email = '';
@@ -63,12 +62,6 @@
   {#if redirectMessage}
     <div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #ffeaa7;">
       {redirectMessage}
-    </div>
-  {/if}
-
-  {#if error}
-    <div style="color: red; margin-bottom: 10px;">
-      {error}
     </div>
   {/if}
 
@@ -221,17 +214,5 @@
 
   .signup-link:hover {
     background-color: #f5f5f5;
-  }
-
-  .tasks-link {
-    display: block;
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: #0d0d0d;
-    text-decoration: none;
-  }
-
-  .tasks-link:hover {
-    text-decoration: underline;
   }
 </style>

@@ -58,9 +58,6 @@
     <label for="password">Password</label>
     <input id="password" type="password" bind:value={password} placeholder="Create Password" required disabled={loading} />
 
-    <label for="password">Confirm Password</label>
-    <input id="password" type="password" bind:value={password} placeholder="Confirm Password" required disabled={loading} />
-
     <button type="submit" class="login-btn" disabled={loading}>
       {loading ? 'Signing Up...' : 'Create Account'}
     </button>
@@ -98,13 +95,6 @@
     width: 200px;
     height: auto;
     margin-bottom: 0.5rem;
-  }
-
-  h1 {
-    font-size: 1.5rem;
-    color: white;
-    letter-spacing: 1px;
-    font-weight: 600;
   }
 
   .signup-form {
