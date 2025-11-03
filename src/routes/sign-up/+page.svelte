@@ -116,7 +116,7 @@
   input {
     border: none;
     outline: none;
-    border-radius: 20px;
+    border-radius: 50px;
     padding: 0.7rem 1rem;
     margin-bottom: 1rem;
     background: white;

@@ -95,14 +95,13 @@
       {loading ? 'Logging in...' : 'Login'}
     </button>
   </form>
-<p><a href="/test">test</a></p>
+
   <!-- Footer Links -->
   <div class="footer-links">
     <p>Don’t have an account?</p>
     <a href="/sign-up" class="signup-link">Sign Up</a>
   </div>
 
-  <a href="/tasks" class="tasks-link">Continue to Tasks Page</a>
 </div>
 
 <style>

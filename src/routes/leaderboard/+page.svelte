@@ -7,7 +7,14 @@
   import noteIcon from '$lib/assets/menu-icon-note.svg';
   import profileIcon from '$lib/assets/menu-icon-profile.svg';
   import liladdIcon from '$lib/assets/add-icon.svg';
-  import { FaUser, FaHome, FaPlus, FaPen, FaClock, FaCrown, FaFire, FaMedal } from 'svelte-icons/fa';
+  import FaUser from 'svelte-icons/fa/FaUser.svelte';
+  import FaHome from 'svelte-icons/fa/FaHome.svelte';
+  import FaPlus from 'svelte-icons/fa/FaPlus.svelte';
+  import FaPen from 'svelte-icons/fa/FaPen.svelte';
+  import FaClock from 'svelte-icons/fa/FaClock.svelte';
+  import FaCrown from 'svelte-icons/fa/FaCrown.svelte';
+  import FaFire from 'svelte-icons/fa/FaFire.svelte';
+  import FaMedal from 'svelte-icons/fa/FaMedal.svelte';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
@@ -82,7 +89,7 @@
             <div class="member-top">
               <div class="rank">
                 {#if i === 0}
-                  <FaCrown size="18" />
+                  <div style="width: 18px; height: 18px; display: inline-flex; align-items: center;"><FaCrown /></div>
                 {:else}
                   <div class="rank-number">{i + 1}</div>
                 {/if}
@@ -97,7 +104,8 @@
                 </div>
                 <div class="meta-row">
                   <div class="streak">
-                    <FaFire size="14" /> <span>{member.streak}-day</span>
+                    <div style="width: 14px; height: 14px; display: inline-flex; align-items: center; margin-right: 6px;"><FaFire /></div>
+                    <span>{member.streak}-day</span>
                   </div>
                   <div class="badge-list">
                     {#each member.badges as b}
@@ -128,8 +136,12 @@
           </div>
 
           <div class="house-badges">
-            <div class="house-badge"><FaMedal size="14" /> Weekly Goal</div>
-            <div class="house-badge"><FaFire size="14" /> Streak Challenge</div>
+            <div class="house-badge">
+              <div style="width: 14px; height: 14px; display: inline-flex; align-items: center;"><FaMedal /></div> Weekly Goal
+            </div>
+            <div class="house-badge">
+              <div style="width: 14px; height: 14px; display: inline-flex; align-items: center;"><FaFire /></div> Streak Challenge
+            </div>
           </div>
         </div>
 
@@ -138,7 +150,10 @@
             <div class="member-compact">
               <div class="m-left">
                 <div class="mc-name">{member.name}</div>
-                <div class="mc-streak"><FaFire size="12" /> {member.streak}-day</div>
+                <div class="mc-streak">
+                  <div style="width: 12px; height: 12px; display: inline-flex; align-items: center; margin-right: 4px;"><FaFire /></div>
+                  {member.streak}-day
+                </div>
               </div>
               <div class="m-right">
                 <div class="mc-points">{member.points} pts</div>
