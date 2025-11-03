@@ -53,9 +53,7 @@
   }
 
   function deleteTask() {
-    if (confirm('Are you sure you want to delete this task?')) {
-      dispatch('delete', { id: task.id });
-    }
+    dispatch('delete', { id: task.id });
   }
 
   function formatDate(dateString) {
