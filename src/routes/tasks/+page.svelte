@@ -1,10 +1,6 @@
 <script>
   import TaskItem from '$lib/components/TaskItem.svelte';
-  import homeIcon from '$lib/assets/menu-icon-home.svg';
-  import addIcon from '$lib/assets/menu-icon-add.svg';
-  import medalIcon from '$lib/assets/menu-icon-medal.svg';
-  import noteIcon from '$lib/assets/menu-icon-note.svg';
-  import profileIcon from '$lib/assets/menu-icon-profile.svg';
+  import BottomNav from '$lib/components/BottomNav.svelte';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
@@ -76,14 +72,25 @@
       return true;
     });
     
-    // Sort tasks: incomplete first, then completed (like Google Keep)
+    // Sort tasks: incomplete first, then by priority (high → medium → low), then completed
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    
     return filtered.sort((a, b) => {
-      // If both have same completion status, maintain original order
-      if (a.completed === b.completed) {
-        return 0;
+      // First, sort by completion status (incomplete first)
+      if (a.completed !== b.completed) {
+        return a.completed - b.completed;
       }
-      // Incomplete tasks come first (false < true)
-      return a.completed - b.completed;
+      
+      // If same completion status, sort by priority
+      const aPriority = priorityOrder[a.priority] ?? 1; // Default to medium if undefined
+      const bPriority = priorityOrder[b.priority] ?? 1;
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      
+      // If same priority, maintain original order
+      return 0;
     });
   }
 
@@ -223,15 +230,9 @@
     {/if}
   </section>
 
-  <a href="/leaderboard">Go to Leaderboard</a>
+  <!-- <a href="/leaderboard">Go to Leaderboard</a> -->
 
-  <nav class="bottom-nav">
-    <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
-    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/profile')}><img src={profileIcon} alt="Profile"/></button>
-    <button class="fab, nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
-    <button type="button" class="nav-button" aria-label="Notes" on:click={() => goto('/notes')}><img src={noteIcon} alt="Notes"/></button>
-    <button type="button" class="nav-button" aria-label="Achievements" on:click={() => goto('/leaderboard')}><img src={medalIcon} alt="Achievements"/></button>
-  </nav>
+  <BottomNav onAddClick={() => (showAdd = !showAdd)} />
 </main>
 
 <style>
@@ -299,13 +300,6 @@
     background: black;
     color: white;
   }
-  .nav-button {
-    background: none;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
   .add-form {
     margin: 10px 0;
     display: flex;
@@ -356,18 +350,5 @@
     border-radius: 6px;
     margin: 10px 0;
     text-align: center;
-  }
-  .bottom-nav {
-    max-width: 420px;
-    margin: 0 auto;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 72px;
-    background: #9fe0d9;
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
   }
 </style>

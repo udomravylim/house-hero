@@ -1,11 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import BottomNav from '$lib/components/BottomNav.svelte';
   import profileIcon from '$lib/assets/menu-icon-profile.svg';
-  import homeIcon from '$lib/assets/menu-icon-home.svg';
-  import addIcon from '$lib/assets/menu-icon-add.svg';
-  import noteIcon from '$lib/assets/menu-icon-note.svg';
-  import medalIcon from '$lib/assets/menu-icon-medal.svg';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
   import { supabase } from '$lib/supabase.js';
 
@@ -14,6 +11,7 @@
   let saving = false;
   let error = '';
   let userId = null;
+  let showLeaveModal = false;
 
   // Profile fields (editable)
   let display_name = '';
@@ -100,28 +98,47 @@
     }
   }
 
-  // Leave household: clears household fields in profile (adjust logic to fit your schema)
-  async function leaveHousehold() {
-    try {
-      const confirmed = confirm('Are you sure you want to leave this household?');
-      if (!confirmed) return;
+  // Show leave household confirmation modal
+  function showLeaveHouseholdModal() {
+    showLeaveModal = true;
+  }
 
+  // Close modal
+  function closeLeaveModal() {
+    showLeaveModal = false;
+  }
+
+  // Leave household: removes user from household_members and redirects to join page
+  async function confirmLeaveHousehold() {
+    try {
+      showLeaveModal = false;
       saving = true;
       error = '';
 
+      // Remove user from household_members table
+      const { error: deleteErr } = await supabase
+        .from('household_members')
+        .delete()
+        .eq('user_id', userId);
+
+      if (deleteErr) throw deleteErr;
+
+      // Optionally clear household fields from profile for consistency
       const { error: updErr } = await supabase
         .from('profiles')
         .update({ household_name: null, household_admin: null, updated_at: new Date().toISOString() })
         .eq('id', userId);
 
-      if (updErr) throw updErr;
+      if (updErr) {
+        console.warn('Profile update warning:', updErr);
+        // Don't throw - the main operation (leaving household) succeeded
+      }
 
-      household_name = '';
-      household_admin = '';
+      // Redirect to join household page
+      goto('/join-household');
     } catch (err) {
       console.error('Leave household error', err);
       error = err?.message ?? 'Could not leave household.';
-    } finally {
       saving = false;
     }
   }
@@ -172,11 +189,11 @@
     <section class="card">
       <h2 class="card-title">Personal Info</h2>
 
-      <label class="label">Username</label>
-      <input class="input" type="text" bind:value={username} />
+      <label class="label" for="username">Username</label>
+      <input id="username" class="input" type="text" bind:value={username} />
 
-      <label class="label">Email</label>
-      <input class="input" type="email" bind:value={email} disabled />
+      <label class="label" for="email">Email</label>
+      <input id="email" class="input" type="email" bind:value={email} disabled />
 
       <div class="card-row right">
         <button class="link-btn" on:click={resetPassword}>Reset Password →</button>
@@ -187,14 +204,14 @@
     <section class="card">
       <h2 class="card-title">Household Info</h2>
 
-      <label class="label">Household Name</label>
-      <input class="input" type="text" bind:value={household_name} />
+      <label class="label" for="household-name">Household Name</label>
+      <input id="household-name" class="input" type="text" bind:value={household_name} />
 
-      <label class="label">Household Admin</label>
-      <input class="input" type="text" bind:value={household_admin} />
+      <label class="label" for="household-admin">Household Admin</label>
+      <input id="household-admin" class="input" type="text" bind:value={household_admin} />
 
       <div class="card-row right">
-        <button class="link-btn danger" on:click={leaveHousehold}>Leave Household →</button>
+        <button class="link-btn danger" on:click={showLeaveHouseholdModal}>Leave Household →</button>
       </div>
     </section>
 
@@ -214,14 +231,36 @@
   {/if}
 
   <!-- Bottom nav (fixed) -->
-  <nav class="bottom-nav">
-    <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
-    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/profile')}><img src={profileIcon} alt="Profile"/></button>
-    <button class="fab nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
-    <button type="button" class="nav-button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
-    <button type="button" class="nav-button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
-  </nav>
+  <BottomNav />
 </main>
+
+<!-- Leave Household Confirmation Modal -->
+{#if showLeaveModal}
+  <div 
+    class="modal-overlay" 
+    role="dialog" 
+    aria-modal="true"
+    aria-labelledby="modal-title"
+    tabindex="-1"
+    on:click={closeLeaveModal} 
+    on:keydown={(e) => e.key === 'Escape' && closeLeaveModal()}
+  >
+    <div class="modal-content" role="region" aria-label="Confirmation dialog content">
+      <h2 id="modal-title" class="modal-title">Leave Household?</h2>
+      <p class="modal-message">
+        Are you sure you want to leave {household_name || 'this household'}?
+      </p>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" on:click={closeLeaveModal} disabled={saving}>
+          Cancel
+        </button>
+        <button class="modal-btn confirm" on:click={confirmLeaveHousehold} disabled={saving}>
+          {saving ? 'Leaving...' : 'Leave'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(body) {
@@ -398,60 +437,6 @@
     cursor: not-allowed;
   }
 
-  /* bottom nav */
-  .bottom-nav {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 76px;
-    background: #bfe6e0;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    z-index: 40;
-  }
-
-  .nav-item, .nav-fab {
-    background: transparent;
-    border: none;
-    padding: 8px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .nav-item img {
-    width: 34px;
-    height: 34px;
-  }
-
-  .nav-fab img {
-    width: 62px;
-    height: 62px;
-    display: block;
-    transform: translateY(-6px);
-  }
-  .bottom-nav {
-    max-width: 420px;
-    margin: 0 auto;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 72px;
-    background: #9fe0d9;
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-  }
-
-    .nav-button {
-    background: none;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
 
   /* small screens adjustments */
   @media (max-width: 420px) {
@@ -469,5 +454,94 @@
       width: 72px;
       height: 72px;
     }
+  }
+
+  /* Modal Styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .modal-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    color: #111;
+  }
+
+  .modal-message {
+    font-size: 16px;
+    color: #666;
+    margin: 0 0 24px 0;
+    line-height: 1.5;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+
+  .modal-btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+
+  .modal-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .modal-btn.cancel {
+    background: #f5f5f5;
+    color: #333;
+  }
+
+  .modal-btn.cancel:hover:not(:disabled) {
+    background: #e9e9e9;
+  }
+
+  .modal-btn.confirm {
+    background: #d32f2f;
+    color: white;
+  }
+
+  .modal-btn.confirm:hover:not(:disabled) {
+    background: #c62828;
   }
 </style>

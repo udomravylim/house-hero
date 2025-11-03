@@ -1,10 +1,6 @@
 <script>
   import TaskItem from '$lib/components/TaskItem.svelte';
-  import homeIcon from '$lib/assets/menu-icon-home.svg';
-  import addIcon from '$lib/assets/menu-icon-add.svg';
-  import medalIcon from '$lib/assets/menu-icon-medal.svg';
-  import noteIcon from '$lib/assets/menu-icon-note.svg';
-  import profileIcon from '$lib/assets/menu-icon-profile.svg';
+  import BottomNav from '$lib/components/BottomNav.svelte';
   import liladdIcon from '$lib/assets/add-icon.svg';
 //   import filtericon from '$lib/assets/filter-icon.svg';
   import { user, getUserDisplayName } from '$lib/stores/user.js';
@@ -37,13 +33,7 @@
     </div>
   </main>
 
-   <nav class="bottom-nav">
-    <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}><img src={homeIcon} alt="Home"/></button>
-    <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/tasks')}><img src={profileIcon} alt="Profile"/></button>
-    <button class="fab, nav-button" on:click={() => (showAdd = !showAdd)} type="button" aria-label="Add new task"><img src={addIcon} alt="Add"/></button>
-    <button type="button" class="nav-button" aria-label="Notes"><img src={noteIcon} alt="Notes"/></button>
-    <button type="button" class="nav-button" aria-label="Achievements"><img src={medalIcon} alt="Achievements"/></button>
-  </nav>
+  <BottomNav />
 
 </div>
 
@@ -139,14 +129,6 @@
     padding: 0.2rem 0.6rem;
   }
 
-  .bottom-nav {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    background-color: #a5d9d4;
-    padding: 0.5rem 0;
-    border-top: 2px solid #0d0d0d10;
-  }
 
   main {
     max-width: 420px;
@@ -161,27 +143,6 @@
     margin-bottom: 18px;
   }
 
-  .nav-button {
-    background: none;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .bottom-nav {
-    max-width: 420px;
-    margin: 0 auto;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 72px;
-    background: #9fe0d9;
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-  }
 
 </style>
 

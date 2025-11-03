@@ -48,14 +48,22 @@
       }
 
       // Check if user is already in a household
-      const { data: existingMembership } = await supabase
+      const { data: existingMembership, error: membershipError } = await supabase
         .from('household_members')
         .select('household_id')
         .eq('user_id', currentUser.id)
-        .single();
+        .maybeSingle();
 
-      if (existingMembership) {
+      // If there's a membership and no error, user is already in a household
+      if (existingMembership && !membershipError) {
         error = 'You are already a member of a household.';
+        loading = false;
+        return;
+      }
+
+      // If error is not "no rows found" (PGRST116), there's a real problem
+      if (membershipError && membershipError.code !== 'PGRST116') {
+        error = membershipError.message || 'Error checking household membership.';
         loading = false;
         return;
       }
