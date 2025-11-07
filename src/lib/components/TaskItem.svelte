@@ -70,7 +70,7 @@
   }
 </script>
 
-<article class="task {task.completed ? 'done' : ''} {editPriority}">
+<article class="task {task.completed ? 'done' : ''} {task.priority || 'medium'}">
   {#if isEditing}
     <div class="edit-form">
       <input 
