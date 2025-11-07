@@ -1,20 +1,8 @@
 <script>
-  import TaskItem from '$lib/components/TaskItem.svelte';
-  import logo from '$lib/assets/house-hero-all-white.png';
   import BottomNav from '$lib/components/BottomNav.svelte';
-  import FaUser from 'svelte-icons/fa/FaUser.svelte';
-  import FaHome from 'svelte-icons/fa/FaHome.svelte';
-  import FaPlus from 'svelte-icons/fa/FaPlus.svelte';
-  import FaPen from 'svelte-icons/fa/FaPen.svelte';
-  import FaClock from 'svelte-icons/fa/FaClock.svelte';
   import FaCrown from 'svelte-icons/fa/FaCrown.svelte';
   import FaFire from 'svelte-icons/fa/FaFire.svelte';
   import FaMedal from 'svelte-icons/fa/FaMedal.svelte';
-  import { user, getUserDisplayName } from '$lib/stores/user.js';
-  import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { supabase } from '$lib/supabase.js';
 
   let view = 'individual';
 
@@ -56,13 +44,9 @@
   }
 </script>
 
-<div class="leaderboard-page">
-  <header class="header">
-    <div class="header-left">
-      <img src={logo} alt="House Hero Logo" class="logo" />
-      <h1>Leaderboard</h1>
-    </div>
-
+<main>
+  <header>
+    <h1>Leaderboard</h1>
     <div class="toggle-wrap" role="tablist" aria-label="View toggle">
       <div class="toggle" class:household={view === 'household'}>
         <button class="toggle-btn left" aria-pressed={view === 'individual'} on:click={() => switchTo('individual')}>
@@ -76,9 +60,9 @@
     </div>
   </header>
 
-  <main class="content">
+  <section class="list">
     {#if view === 'individual'}
-      <section class="cards">
+      <div class="cards">
         {#each sortedMembers as member, i}
           <article class="member-card">
             <div class="member-top">
@@ -114,9 +98,9 @@
             <p class="member-note">Any notes or recent achievement summaries can appear here.</p>
           </article>
         {/each}
-      </section>
+      </div>
     {:else}
-      <section class="household-card">
+      <div class="household-card">
         <div class="house-summary">
           <h2>This Week’s Progress</h2>
           <p class="house-stats">{householdTotal} / {householdGoal} pts</p>
@@ -156,50 +140,31 @@
             </div>
           {/each}
         </div>
-      </section>
+      </div>
     {/if}
-  </main>
+  </section>
 
   <BottomNav />
-</div>
+</main>
 
 <style>
-  :global(body) {
-    margin: 0;
-    font-family: 'Inter', sans-serif;
-    background-color: #a5d9d4;
+  main {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 28px 20px 100px;
   }
 
-  .leaderboard-page {
+  header {
     display: flex;
-    flex-direction: column;
-    height: 100vh;
     justify-content: space-between;
-  }
-
-  .header {
-    display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.9rem 1rem;
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .logo {
-    width: 46px;
-    height: auto;
+    margin-bottom: 18px;
   }
 
   h1 {
-    font-size: 1.1rem;
+    font-size: 32px;
+    font-weight: 800;
     margin: 0;
-    color: #0d0d0d;
-    font-weight: 700;
   }
 
   .toggle-wrap {
@@ -247,10 +212,8 @@
     transform: translateX(100%);
   }
 
-  .content {
-    flex: 1;
-    padding: 0.5rem 0 0.5rem 0;
-    overflow-y: auto;
+  .list {
+    margin-top: 8px;
   }
 
   .cards {
@@ -258,7 +221,6 @@
     flex-direction: column;
     gap: 1rem;
     align-items: center;
-    padding: 0.5rem 0 4rem 0;
   }
 
   .member-card {
@@ -475,6 +437,5 @@
   @media (max-width: 420px) {
     .toggle { width: 150px; }
     .member-card, .house-summary, .members-compact { width: 90%; }
-    .logo { width: 40px; }
   }
 </style>

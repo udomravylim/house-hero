@@ -13,8 +13,8 @@
   let userId = null;
   let showLeaveModal = false;
 
-  // Profile fields (editable)
-  let display_name = '';
+  // Profile fields (display only)
+  let fullName = '';
   let username = '';
   let email = '';
   let household_name = '';
@@ -41,25 +41,75 @@
 
       userId = user.id;
       email = user.email ?? '';
+      
+      // Get full name from user metadata
+      fullName = user.user_metadata?.full_name || '';
 
-      // Fetch profile row from 'profiles' table (adjust table name if different)
+      // Fetch profile row from 'profiles' table
       const { data: profiles, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (profileErr && profileErr.code !== 'PGRST116') {
-        // PGRST116: no rows returned on some setups — we'll allow missing profile
-        throw profileErr;
+        console.warn('Profile fetch warning:', profileErr);
       }
 
       if (profiles) {
-        display_name = profiles.display_name ?? '';
         username = profiles.username ?? '';
-        household_name = profiles.household_name ?? '';
-        household_admin = profiles.household_admin ?? '';
+        // Use full_name from metadata if available, otherwise use display_name from profile
+        if (!fullName && profiles.display_name) {
+          fullName = profiles.display_name;
+        }
+      }
+
+      // Fetch household information from household_members and households tables
+      const { data: householdMember, error: memberErr } = await supabase
+        .from('household_members')
+        .select(`
+          household_id,
+          is_admin,
+          households (
+            id,
+            name,
+            created_by_email
+          )
+        `)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (memberErr && memberErr.code !== 'PGRST116') {
+        console.warn('Household member fetch warning:', memberErr);
+      }
+
+      if (householdMember) {
+        // Handle households as object (from join) or array
+        const household = Array.isArray(householdMember.households) 
+          ? householdMember.households[0] 
+          : householdMember.households;
+        
+        if (household) {
+          household_name = household.name || '';
+          
+          // Get household admin info
+          if (householdMember.is_admin) {
+            household_admin = fullName || email;
+          } else {
+            // Find the admin of this household
+            const { data: adminMember } = await supabase
+              .from('household_members')
+              .select('user_name, user_email')
+              .eq('household_id', householdMember.household_id)
+              .eq('is_admin', true)
+              .maybeSingle();
+            
+            if (adminMember) {
+              household_admin = adminMember.user_name || adminMember.user_email || '';
+            }
+          }
+        }
       }
     } catch (err) {
       console.error('Profile load error', err);
@@ -69,34 +119,6 @@
     }
   });
 
-  // Save changes back to Supabase
-  async function saveProfile() {
-    try {
-      saving = true;
-      error = '';
-
-      // Upsert to profiles table (id = auth user id)
-      const updates = {
-        id: userId,
-        display_name,
-        username,
-        household_name,
-        household_admin,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: upsertErr } = await supabase.from('profiles').upsert(updates, { returning: 'minimal' });
-
-      if (upsertErr) throw upsertErr;
-
-      // Optionally show a little visual confirmation (not implemented here)
-    } catch (err) {
-      console.error('Save error', err);
-      error = err?.message ?? 'Failed to save profile.';
-    } finally {
-      saving = false;
-    }
-  }
 
   // Show leave household confirmation modal
   function showLeaveHouseholdModal() {
@@ -143,23 +165,10 @@
     }
   }
 
-  // Reset password: redirects to a password reset flow (open a modal / call supabase.auth.resetPasswordForEmail)
-  async function resetPassword() {
-    try {
-      if (!email) {
-        alert('No email available for this account.');
-        return;
-      }
-      // This example triggers Supabase to send a password reset email.
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${location.origin}/reset-complete`
-      });
-      if (resetErr) throw resetErr;
-      alert('Password reset email sent.');
-    } catch (err) {
-      console.error('Reset password error', err);
-      alert(err?.message ?? 'Unable to send reset email.');
-    }
+  // Handle logout
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    goto('/');
   }
 </script>
 
@@ -179,7 +188,7 @@
       </div>
 
       <div class="header-actions">
-        <button class="logout" on:click={async () => { await supabase.auth.signOut(); goto('/'); }}>
+        <button class="logout-btn" on:click={handleLogout}>
           Logout
         </button>
       </div>
@@ -189,14 +198,21 @@
     <section class="card">
       <h2 class="card-title">Personal Info</h2>
 
-      <label class="label" for="username">Username</label>
-      <input id="username" class="input" type="text" bind:value={username} />
+      <div class="info-item">
+        <div class="info-label">Full Name</div>
+        <div class="info-value">{fullName || 'Not set'}</div>
+      </div>
 
-      <label class="label" for="email">Email</label>
-      <input id="email" class="input" type="email" bind:value={email} disabled />
+      {#if username}
+        <div class="info-item">
+          <div class="info-label">Username</div>
+          <div class="info-value">{username}</div>
+        </div>
+      {/if}
 
-      <div class="card-row right">
-        <button class="link-btn" on:click={resetPassword}>Reset Password →</button>
+      <div class="info-item">
+        <div class="info-label">Email</div>
+        <div class="info-value">{email || 'Not available'}</div>
       </div>
     </section>
 
@@ -204,30 +220,23 @@
     <section class="card">
       <h2 class="card-title">Household Info</h2>
 
-      <label class="label" for="household-name">Household Name</label>
-      <input id="household-name" class="input" type="text" bind:value={household_name} />
-
-      <label class="label" for="household-admin">Household Admin</label>
-      <input id="household-admin" class="input" type="text" bind:value={household_admin} />
-
-      <div class="card-row right">
-        <button class="link-btn danger" on:click={showLeaveHouseholdModal}>Leave Household →</button>
+      <div class="info-item">
+        <div class="info-label">Household Name</div>
+        <div class="info-value">{household_name || 'Not in a household'}</div>
       </div>
+
+      <div class="info-item">
+        <div class="info-label">Household Admin</div>
+        <div class="info-value">{household_admin || 'N/A'}</div>
+      </div>
+
+      {#if household_name}
+        <div class="card-actions">
+          <button class="action-btn danger" on:click={showLeaveHouseholdModal}>Leave Household</button>
+        </div>
+      {/if}
     </section>
 
-    <!-- Create Another Household -->
-    <div class="create-row">
-      <button class="ghost-btn" on:click={() => goto('/households/create')}>
-        Create Another Household <span class="plus">+</span>
-      </button>
-    </div>
-
-    <!-- Save Button -->
-    <div class="save-row">
-      <button class="save-btn" on:click={saveProfile} disabled={saving}>
-        {#if saving}Saving…{:else}Save Changes{/if}
-      </button>
-    </div>
   {/if}
 
   <!-- Bottom nav (fixed) -->
@@ -321,14 +330,20 @@
     color: #222;
   }
 
-  .header-actions .logout {
+  .logout-btn {
     border: none;
     background: #f4f6f6;
-    padding: 8px 12px;
+    padding: 10px 16px;
     border-radius: 8px;
     cursor: pointer;
     color: #444;
     font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+  }
+
+  .logout-btn:hover {
+    background: #e8eaea;
   }
 
   .card {
@@ -346,95 +361,53 @@
     color: #111;
   }
 
-  .label {
-    display: block;
-    margin-bottom: 8px;
-    color: #222;
-    font-weight: 600;
-    font-size: 14px;
+  .info-item {
+    margin-bottom: 20px;
   }
 
-  .input {
-    width: 100%;
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: none;
-    font-size: 16px;
-    margin-bottom: 16px;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
-    background: #fff;
+  .info-item:last-child {
+    margin-bottom: 0;
   }
 
-  .input:disabled {
-    opacity: 0.8;
-  }
-
-  .card-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 6px;
-  }
-
-  .card-row.right {
-    justify-content: flex-end;
-  }
-
-  .link-btn {
-    background: transparent;
-    border: none;
-    color: #222;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 6px;
-  }
-
-  .link-btn.danger {
-    color: #222;
-  }
-
-  .create-row {
-    display: flex;
-    justify-content: flex-start;
-    margin: 8px 0 28px 0;
-  }
-
-  .ghost-btn {
-    background: #f1f1f1;
-    border-radius: 16px;
-    padding: 10px 14px;
-    border: none;
+  .info-label {
+    font-size: 12px;
     font-weight: 600;
     color: #666;
-    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
   }
 
-  .ghost-btn .plus {
-    margin-left: 8px;
-    font-weight: 700;
-  }
-
-  .save-row {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 32px;
-  }
-
-  .save-btn {
-    background: #111;
-    color: #fff;
-    padding: 12px 26px;
-    border-radius: 12px;
-    border: none;
-    font-weight: 700;
+  .info-value {
     font-size: 16px;
-    cursor: pointer;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    color: #222;
+    font-weight: 500;
   }
 
-  .save-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  .card-actions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+  }
+
+  .action-btn {
+    width: 100%;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .action-btn.danger {
+    background: #ffebee;
+    color: #c62828;
+  }
+
+  .action-btn.danger:hover {
+    background: #ffcdd2;
   }
 
 
