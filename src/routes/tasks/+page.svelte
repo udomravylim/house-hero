@@ -304,6 +304,14 @@
     align-items: center;
     margin-bottom: 18px;
   }
+  :root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+body {
+  font-family: inherit;
+}
   
   h1 {
     font-size: 32px;
