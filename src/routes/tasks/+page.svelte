@@ -5,6 +5,7 @@
   import { tasks, loading, error, fetchTasks, createTask, updateTask, deleteTask, toggleTaskCompletion, getUsers } from '$lib/stores/tasks.js';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { supabase } from '$lib/supabase.js';
 
   let view = 'all';
@@ -17,6 +18,22 @@
   let availableUsers = [];
 
   let authChecked = false;
+
+  // Check for add query parameter immediately (reactive)
+  $: if ($page.url.searchParams.get('add') === 'true' && !showAdd) {
+    showAdd = true;
+    // Remove the query parameter from URL
+    goto('/tasks', { replaceState: true });
+  }
+
+  // Refresh users when form opens and auth is checked
+  $: if (showAdd && availableUsers.length === 0 && authChecked) {
+    getUsers().then(users => {
+      availableUsers = users;
+    }).catch(err => {
+      console.error('Error loading users:', err);
+    });
+  }
 
   onMount(async () => {
     // Wait for auth to initialize
@@ -31,11 +48,17 @@
     // Check if user is in a household
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
-      const { data: householdMembership } = await supabase
+      const { data: householdMembership, error: membershipError } = await supabase
         .from('household_members')
         .select('household_id')
         .eq('user_id', currentUser.id)
-        .single();
+        .maybeSingle();
+      
+      if (membershipError) {
+        console.error('Error checking household membership:', membershipError);
+        goto('/join-household');
+        return;
+      }
       
       if (!householdMembership) {
         goto('/join-household');
@@ -45,7 +68,14 @@
     
     authChecked = true;
     await fetchTasks();
-    availableUsers = await getUsers();
+    
+    // Load users after everything else is ready
+    try {
+      availableUsers = await getUsers();
+    } catch (err) {
+      console.error('Error loading users on mount:', err);
+      availableUsers = [];
+    }
   });
 
   // Handle authentication changes only after initial check
@@ -53,12 +83,16 @@
     goto('/?message=login-required');
   }
 
-  function filteredTasks() {
+  // Use availableUsers directly since getUsers() already filters out current user
+  $: otherUsers = availableUsers;
+
+  // Reactive filtered and sorted tasks
+  $: filteredTasks = (() => {
     const currentUser = $user?.email;
-    if (!currentUser) return [];
+    if (!currentUser || !$tasks || $tasks.length === 0) return [];
     
     // Filter tasks based on view
-    const filtered = $tasks.filter((task) => {
+    let filtered = $tasks.filter((task) => {
       if (view === 'all') {
         // Show all tasks in the household
         return true;
@@ -92,7 +126,7 @@
       // If same priority, maintain original order
       return 0;
     });
-  }
+  })();
 
   async function handleToggle(ev) {
     const id = ev.detail.id;
@@ -118,17 +152,36 @@
     const currentUser = $user?.email;
     if (!currentUser) return;
 
-    // Get current user's name for initial
-    const currentUserName = getUserDisplayName($user);
-    const currentUserInitial = currentUserName.charAt(0).toUpperCase();
+    // Determine assignee information based on selection
+    let assigneeEmail = null;
+    let assigneeInitial = null;
+    let assigneeName = null;
+
+    if (newAssignee === 'unassigned') {
+      // Leave task unassigned
+      assigneeEmail = 'unassigned';
+      assigneeInitial = null;
+      assigneeName = null;
+    } else if (newAssignee === 'me' || newAssignee === '') {
+      // Assign to current user
+      assigneeEmail = currentUser;
+      assigneeInitial = getUserDisplayName($user).charAt(0).toUpperCase();
+      assigneeName = getUserDisplayName($user);
+    } else if (newAssignee) {
+      // Assign to selected user
+      const selectedUser = availableUsers.find(u => u.email === newAssignee);
+      assigneeEmail = newAssignee;
+      assigneeInitial = selectedUser?.initial || newAssignee.charAt(0).toUpperCase();
+      assigneeName = selectedUser?.name || newAssignee.split('@')[0];
+    }
 
     const taskData = {
       title: newTitle,
       description: newDescription,
       due_date: newDueDate || null,
-      assignee_email: newAssignee || currentUser,
-      assignee_initial: newAssignee ? availableUsers.find(u => u.email === newAssignee)?.initial || newAssignee.charAt(0).toUpperCase() : currentUserInitial,
-      assignee_name: newAssignee ? availableUsers.find(u => u.email === newAssignee)?.name || newAssignee.split('@')[0] : currentUserName,
+      assignee_email: assigneeEmail,
+      assignee_initial: assigneeInitial,
+      assignee_name: assigneeName,
       priority: newPriority
     };
 
@@ -195,8 +248,9 @@
       <textarea placeholder="Description (optional)" bind:value={newDescription}></textarea>
       <input type="date" bind:value={newDueDate} />
       <select bind:value={newAssignee}>
-        <option value="">Assign to me</option>
-        {#each availableUsers as user}
+        <option value="unassigned">Unassigned</option>
+        <option value="me">Assign to me</option>
+        {#each otherUsers as user}
           <option value={user.email}>Assign to {user.name}</option>
         {/each}
       </select>
@@ -218,13 +272,13 @@
   <section class="list">
     {#if $loading}
       <div class="loading">Loading tasks...</div>
-    {:else if filteredTasks().length === 0}
+    {:else if filteredTasks.length === 0}
       <div class="empty-state">
         <p>No tasks found.</p>
         <p>Click the + button to add your first task!</p>
       </div>
     {:else}
-      {#each filteredTasks() as task (task.id)}
+      {#each filteredTasks as task (task.id)}
         <TaskItem {task} {availableUsers} currentUserEmail={$user?.email} on:toggle={handleToggle} on:edit={handleEdit} on:delete={handleDelete} />
       {/each}
     {/if}
@@ -232,7 +286,13 @@
 
   <!-- <a href="/leaderboard">Go to Leaderboard</a> -->
 
-  <BottomNav onAddClick={() => (showAdd = !showAdd)} />
+  <BottomNav 
+    onAddClick={() => (showAdd = !showAdd)} 
+    onHomeClick={() => {
+      showAdd = false;
+      goto('/tasks');
+    }}
+  />
 </main>
 
 <style>

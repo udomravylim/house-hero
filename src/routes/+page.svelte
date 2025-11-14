@@ -10,6 +10,7 @@
   let password = '';
   let loading = false;
   let error = '';
+  let showPassword = false;
 
   let redirectMessage = '';
 
@@ -71,25 +72,36 @@
       <div class="error-message">{error}</div>
     {/if}
 
-    <label for="email">Username</label>
+    <label for="email">Email</label>
     <input
       type="email"
       id="email"
-      placeholder="Enter username or email"
+      placeholder="john@example.com"
       bind:value={email}
       required
       disabled={loading}
     />
 
     <label for="password">Password</label>
-    <input
-      type="password"
-      id="password"
-      placeholder="Enter password"
-      bind:value={password}
-      required
-      disabled={loading}
-    />
+    <div class="password-input-wrapper">
+      <input
+        type={showPassword ? 'text' : 'password'}
+        id="password"
+        placeholder="************"
+        bind:value={password}
+        required
+        disabled={loading}
+      />
+      <button
+        type="button"
+        class="password-toggle"
+        on:click={() => showPassword = !showPassword}
+        disabled={loading}
+        aria-label={showPassword ? 'Hide password' : 'Show password'}
+      >
+        {showPassword ? 'Hide' : 'Show'}
+      </button>
+    </div>
 
     <button type="submit" class="login-btn" disabled={loading}>
       {loading ? 'Logging in...' : 'Login'}
@@ -160,6 +172,50 @@
     margin-bottom: 1rem;
     background: white;
     font-size: 0.9rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .password-input-wrapper {
+    position: relative;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+
+  .password-input-wrapper input {
+    width: 100%;
+    padding-right: 3rem;
+    margin-bottom: 0;
+    box-sizing: border-box;
+  }
+
+  .password-toggle {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: color 0.2s;
+    white-space: nowrap;
+  }
+
+  .password-toggle:hover:not(:disabled) {
+    color: #000;
+  }
+
+  .password-toggle:disabled {
+    cursor: not-allowed;
+    color: #999;
   }
 
   input::placeholder {

@@ -8,10 +8,32 @@
 
   // Optional prop for custom add button handler
   export let onAddClick = null;
+  // Optional prop for custom home button handler
+  export let onHomeClick = null;
+
+  function handleAddClick() {
+    if (onAddClick) {
+      // If we're on the tasks page and have the handler, use it
+      onAddClick();
+    } else {
+      // If we're not on tasks page, navigate to tasks with add=true query param
+      goto('/tasks?add=true');
+    }
+  }
+
+  function handleHomeClick() {
+    if (onHomeClick) {
+      // If we have a custom handler, use it
+      onHomeClick();
+    } else {
+      // Otherwise, just navigate to tasks
+      goto('/tasks');
+    }
+  }
 </script>
 
 <nav class="bottom-nav">
-  <button type="button" class="nav-button" aria-label="Home" on:click={() => goto('/tasks')}>
+  <button type="button" class="nav-button" aria-label="Home" on:click={handleHomeClick}>
     <img src={homeIcon} alt="Home"/>
   </button>
   <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/profile')}>
@@ -21,7 +43,7 @@
     class="fab nav-button" 
     type="button" 
     aria-label="Add new task" 
-    on:click={() => onAddClick ? onAddClick() : goto('/tasks')}
+    on:click={handleAddClick}
   >
     <img src={addIcon} alt="Add"/>
   </button>
@@ -65,9 +87,6 @@
     height: 24px;
   }
 
-  .fab {
-    /* Add any special styling for the floating action button if needed */
-  }
 
   @media (max-width: 420px) {
     .bottom-nav {

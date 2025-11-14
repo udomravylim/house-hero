@@ -78,15 +78,20 @@ export async function createTask(taskData) {
     const userName = user.user_metadata?.full_name || user.email.split('@')[0];
     const userInitial = userName.charAt(0).toUpperCase();
 
+    // Handle assignee data - if unassigned, set to null, otherwise use provided or default to current user
+    const assigneeEmail = taskData.assignee_email || user.email;
+    const assigneeInitial = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_initial || userInitial);
+    const assigneeName = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_name || userName);
+
     const { data, error: insertError } = await supabase
       .from('tasks')
       .insert([{
         title: taskData.title,
         description: taskData.description || '',
         due_date: taskData.due_date || null,
-        assignee_email: taskData.assignee_email || user.email,
-        assignee_initial: taskData.assignee_initial || userInitial,
-        assignee_name: taskData.assignee_name || userName,
+        assignee_email: assigneeEmail,
+        assignee_initial: assigneeInitial,
+        assignee_name: assigneeName,
         created_by: user.email,
         created_by_name: userName,
         priority: taskData.priority || 'medium',
@@ -134,13 +139,19 @@ export async function updateTask(taskId, updates) {
         .single();
 
       if (householdMember) {
-        // If empty string, assign to current user
-        if (!updates.assignee_email || updates.assignee_email === '') {
+        // Handle different assignee values
+        if (updates.assignee_email === 'unassigned') {
+          // Unassigned
+          updates.assignee_email = 'unassigned';
+          updates.assignee_name = null;
+          updates.assignee_initial = null;
+        } else if (!updates.assignee_email || updates.assignee_email === '' || updates.assignee_email === 'me') {
+          // Assign to current user
           updates.assignee_email = user.email;
           const userName = user.user_metadata?.full_name || user.email.split('@')[0];
           updates.assignee_name = userName;
           updates.assignee_initial = userName.charAt(0).toUpperCase();
-        } else if (updates.assignee_email !== 'unassigned') {
+        } else {
           // Find the assignee member info
           const { data: assigneeMember } = await supabase
             .from('household_members')
@@ -154,10 +165,6 @@ export async function updateTask(taskId, updates) {
             updates.assignee_name = assigneeName;
             updates.assignee_initial = assigneeName.charAt(0).toUpperCase();
           }
-        } else {
-          // Unassigned
-          updates.assignee_name = null;
-          updates.assignee_initial = null;
         }
       }
     }
@@ -237,40 +244,56 @@ export async function toggleTaskCompletion(taskId, completed) {
 // Get all users from the household (for assignment dropdown)
 export async function getUsers() {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Error getting user:', authError);
       return [];
     }
 
     // Get user's household
-    const { data: householdMember } = await supabase
+    const { data: householdMember, error: householdError } = await supabase
       .from('household_members')
       .select('household_id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (householdError) {
+      console.error('Error fetching household member:', householdError);
+      return [];
+    }
 
     if (!householdMember) {
+      console.warn('User is not in a household');
       return [];
     }
 
     // Get all members of the same household
-    const { data: householdMembers, error } = await supabase
+    const { data: householdMembers, error: membersError } = await supabase
       .from('household_members')
       .select('user_email, user_name, user_id')
       .eq('household_id', householdMember.household_id);
 
-    if (error || !householdMembers) {
+    if (membersError) {
+      console.error('Error fetching household members:', membersError);
       return [];
     }
 
-    // Return the household members as a list of users, excluding current user
-    return householdMembers
-      .filter(member => member.user_id !== user.id)
+    if (!householdMembers || householdMembers.length === 0) {
+      console.warn('No household members found');
+      return [];
+    }
+
+    // Return the household members as a list of users, excluding the current user
+    // (since "Assign to me" option is separate in the UI)
+    const users = householdMembers
+      .filter(member => member.user_id !== user.id) // Exclude current user
       .map(member => ({
         email: member.user_email,
         name: member.user_name || member.user_email.split('@')[0],
         initial: (member.user_name || member.user_email.split('@')[0]).charAt(0).toUpperCase()
       }));
+
+    return users;
   } catch (err) {
     console.error('Error fetching users:', err);
     return [];
