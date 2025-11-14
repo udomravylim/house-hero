@@ -23,8 +23,14 @@
     editTitle = task.title;
     editDescription = task.description || '';
     editDueDate = task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '';
-    // If assignee is current user, set to empty string so "Assign to me" is selected
-    editAssignee = (task.assignee_email === currentUserEmail) ? '' : (task.assignee_email || '');
+    // Set assignee: 'unassigned' if unassigned, '' if current user, otherwise the email
+    if (task.assignee_email === 'unassigned' || !task.assignee_email) {
+      editAssignee = 'unassigned';
+    } else if (task.assignee_email === currentUserEmail) {
+      editAssignee = 'me';
+    } else {
+      editAssignee = task.assignee_email;
+    }
     editPriority = task.priority || 'medium';
   }
 
@@ -90,7 +96,8 @@
         class="edit-input"
       />
       <select bind:value={editAssignee} class="edit-select">
-        <option value="">Assign to me</option>
+        <option value="unassigned">Unassigned</option>
+        <option value="me">Assign to me</option>
         {#each availableUsers as user}
           <option value={user.email}>Assign to {user.name}</option>
         {/each}
@@ -122,7 +129,11 @@
     </div>
 
     <div class="right">
-      <div class="avatar">{task.assignee_initial}</div>
+      {#if task.assignee_email === 'unassigned' || !task.assignee_email}
+        <div class="avatar unassigned">?</div>
+      {:else}
+        <div class="avatar">{task.assignee_initial}</div>
+      {/if}
       <div class="actions">
         <button on:click={startEdit} class="edit-btn" title="Edit task">✏️</button>
         <button on:click={deleteTask} class="delete-btn" title="Delete task">🗑️</button>
@@ -178,10 +189,14 @@
         <div class="detail-section">
           <h4>Assignee</h4>
           <p class="detail-value">
-            <span class="assignee">
-              <span class="assignee-avatar">{task.assignee_initial}</span>
-              {task.assignee_name || task.assignee_email}
-            </span>
+            {#if task.assignee_email === 'unassigned' || !task.assignee_email}
+              <span class="assignee unassigned">Unassigned</span>
+            {:else}
+              <span class="assignee">
+                <span class="assignee-avatar">{task.assignee_initial}</span>
+                {task.assignee_name || task.assignee_email}
+              </span>
+            {/if}
           </p>
         </div>
         

@@ -5,13 +5,25 @@
 
   let email = '';
   let password = '';
+  let confirmPassword = '';
   let fullName = '';
   let loading = false;
   let error = '';
+  let showPassword = false;
+  let showConfirmPassword = false;
+
+  // Check if passwords match
+  $: passwordsMatch = password && confirmPassword && password === confirmPassword;
+  $: passwordsMismatch = confirmPassword && password !== confirmPassword;
 
   async function handleSignup() {
-    if (!email || !password || !fullName) {
+    if (!email || !password || !fullName || !confirmPassword) {
       error = 'Please fill in all required fields';
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      error = 'Passwords do not match';
       return;
     }
 
@@ -49,14 +61,57 @@
     {#if error}
       <div class="error-message">{error}</div>
     {/if}
-    <label for="fullName">Full Name</label>
-    <input id="fullName" type="text" bind:value={fullName} placeholder="Enter Name" required disabled={loading} />
+    <label for="fullName">Name</label>
+    <input id="fullName" type="text" bind:value={fullName} placeholder="John Doe" required disabled={loading} />
 
     <label for="email">Email</label>
-    <input id="email" type="email" bind:value={email} placeholder="Enter Email" required disabled={loading} />
+    <input id="email" type="email" bind:value={email} placeholder="john@example.com" required disabled={loading} />
 
     <label for="password">Password</label>
-    <input id="password" type="password" bind:value={password} placeholder="Create Password" required disabled={loading} />
+    <div class="password-input-wrapper">
+      <input
+        id="password"
+        type={showPassword ? 'text' : 'password'}
+        bind:value={password}
+        placeholder="Create Password"
+        required
+        disabled={loading}
+        class:password-match={passwordsMatch}
+        class:password-mismatch={passwordsMismatch}
+      />
+      <button
+        type="button"
+        class="password-toggle"
+        on:click={() => showPassword = !showPassword}
+        disabled={loading}
+        aria-label={showPassword ? 'Hide password' : 'Show password'}
+      >
+        {showPassword ? 'Hide' : 'Show'}
+      </button>
+    </div>
+
+    <label for="confirmPassword">Confirm Password</label>
+    <div class="password-input-wrapper">
+      <input
+        id="confirmPassword"
+        type={showConfirmPassword ? 'text' : 'password'}
+        bind:value={confirmPassword}
+        placeholder="Confirm Password"
+        required
+        disabled={loading}
+        class:password-match={passwordsMatch}
+        class:password-mismatch={passwordsMismatch}
+      />
+      <button
+        type="button"
+        class="password-toggle"
+        on:click={() => showConfirmPassword = !showConfirmPassword}
+        disabled={loading}
+        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+      >
+        {showConfirmPassword ? 'Hide' : 'Show'}
+      </button>
+    </div>
 
     <button type="submit" class="login-btn" disabled={loading}>
       {loading ? 'Signing Up...' : 'Create Account'}
@@ -69,9 +124,11 @@
 </div>
 
 <style>
-  :global(body) {
+  :global(html, body) {
     margin: 0;
+    padding: 0;
     font-family: 'Inter', sans-serif;
+    height: 100%;
   }
  
   .signup-container {
@@ -79,9 +136,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100vh;
+    min-height: 100vh;
+    width: 100%;
     text-align: center;
     background-color: #a5d9d4;
+    padding: 1rem;
+    box-sizing: border-box;
   }
 
   .logo-section {
@@ -121,6 +181,57 @@
     margin-bottom: 1rem;
     background: white;
     font-size: 0.9rem;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border 0.3s;
+  }
+
+  .password-input-wrapper {
+    position: relative;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+
+  .password-input-wrapper input {
+    padding-right: 3rem;
+    margin-bottom: 0;
+  }
+
+  .password-input-wrapper input.password-match {
+    border: 2px solid #4caf50;
+  }
+
+  .password-input-wrapper input.password-mismatch {
+    border: 2px solid #f44336;
+  }
+
+  .password-toggle {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: color 0.2s;
+    white-space: nowrap;
+  }
+
+  .password-toggle:hover:not(:disabled) {
+    color: #000;
+  }
+
+  .password-toggle:disabled {
+    cursor: not-allowed;
+    color: #999;
   }
 
   .login-btn {
