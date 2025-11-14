@@ -7,6 +7,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { supabase } from '$lib/supabase.js';
+  import profileIcon from '$lib/assets/menu-icon-profile.svg';
 
   let view = 'all';
   let showAdd = false;
@@ -211,15 +212,11 @@
 </script>
 
 <main>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
-    <button class="logout-btn" on:click={handleLogout} title="Logout">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-        <polyline points="16,17 21,12 16,7"/>
-        <line x1="21" y1="12" x2="9" y2="12"/>
-      </svg>
-      Logout
+    <button type="button" class="profile-button" aria-label="Profile" on:click={() => goto('/profile')}>
+    <img src={profileIcon} alt="Profile"/>
     </button>
   </header>
 
@@ -411,4 +408,13 @@
     margin: 10px 0;
     text-align: center;
   }
+
+  .profile-button {
+    background: none;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+
 </style>
