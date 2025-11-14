@@ -246,8 +246,14 @@
     <div class="add-form">
       <input placeholder="Task title" bind:value={newTitle} required />
       <textarea placeholder="Description (optional)" bind:value={newDescription}></textarea>
-      <input type="date" bind:value={newDueDate} />
+      <div class="date-input-wrapper">
+        <input type="date" bind:value={newDueDate} class:has-value={newDueDate} />
+        {#if !newDueDate}
+          <span class="date-placeholder">Select due date</span>
+        {/if}
+      </div>
       <select bind:value={newAssignee}>
+        <option value="">Assign task to someone</option>
         <option value="unassigned">Unassigned</option>
         <option value="me">Assign to me</option>
         {#each otherUsers as user}
@@ -255,6 +261,7 @@
         {/each}
       </select>
       <select bind:value={newPriority}>
+        <option value="">Select priority</option>
         <option value="low">Low Priority</option>
         <option value="medium">Medium Priority</option>
         <option value="high">High Priority</option>
@@ -374,6 +381,56 @@
     border-radius: 6px;
     border: 1px solid #ddd;
     font-size: 14px;
+  }
+  .date-input-wrapper {
+    position: relative;
+    width: 100%;
+  }
+  .date-input-wrapper input[type="date"] {
+    width: 100%;
+    position: relative;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .date-input-wrapper input[type="date"]:not(.has-value) {
+    color: transparent;
+  }
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit {
+    color: transparent;
+  }
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-fields-wrapper {
+    color: transparent;
+  }
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-text {
+    color: transparent;
+  }
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-month-field,
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-day-field,
+  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-year-field {
+    color: transparent;
+  }
+  .date-input-wrapper input[type="date"].has-value {
+    color: inherit;
+  }
+  .date-input-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    right: 10px;
+    z-index: 2;
+    cursor: pointer;
+    opacity: 1;
+  }
+  .date-placeholder {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    pointer-events: none;
+    font-size: 14px;
+    z-index: 1;
   }
   .add-form textarea {
     min-height: 60px;
