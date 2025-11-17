@@ -36,9 +36,6 @@
   <button type="button" class="nav-button" aria-label="Home" on:click={handleHomeClick}>
     <img src={homeIcon} alt="Home"/>
   </button>
-  <button type="button" class="nav-button" aria-label="Profile" on:click={() => goto('/profile')}>
-    <img src={profileIcon} alt="Profile"/>
-  </button>
   <button 
     class="fab nav-button" 
     type="button" 
@@ -46,9 +43,6 @@
     on:click={handleAddClick}
   >
     <img src={addIcon} alt="Add"/>
-  </button>
-  <button type="button" class="nav-button" aria-label="Notes" on:click={() => goto('/notes')}>
-    <img src={noteIcon} alt="Notes"/>
   </button>
   <button type="button" class="nav-button" aria-label="Achievements" on:click={() => goto('/leaderboard')}>
     <img src={medalIcon} alt="Achievements"/>
@@ -67,7 +61,8 @@
     background: #9fe0d9;
     display: flex;
     align-items: center;
-    justify-content: space-around;
+    justify-content: center;
+    gap: 40px;    
     z-index: 100;
   }
 
@@ -80,11 +75,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .nav-button img {
-    width: 24px;
-    height: 24px;
   }
 
 
