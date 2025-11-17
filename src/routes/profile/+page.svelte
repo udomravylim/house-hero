@@ -1,174 +1,105 @@
 <script>
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import BottomNav from '$lib/components/BottomNav.svelte';
-  import profileIcon from '$lib/assets/menu-icon-profile.svg';
-  import { user, getUserDisplayName } from '$lib/stores/user.js';
-  import { supabase } from '$lib/supabase.js';
+  import { supabase } from '$lib/supabaseClient';
+  import { user } from '$lib/stores/userStore';
+  import { getUserDisplayName } from '$lib/utils/format';
+  import profileIcon from '$lib/assets/profile-icon.png';
 
-  // UI state
-  let loading = true;
-  let saving = false;
-  let error = '';
-  let userId = null;
-  let showLeaveModal = false;
-
-  // Profile fields (display only)
   let fullName = '';
   let username = '';
   let email = '';
   let household_name = '';
   let household_admin = '';
+  let avatarUrl = null;
 
-  // Fetch the current user & profile on mount
+  let loading = true;
+  let error = null;
+
+  let showLeaveModal = false;
+  let leaveLoading = false;
+
   onMount(async () => {
     try {
       loading = true;
-      error = '';
 
-      // get current auth user
-      const {
-        data: { user },
-        error: authErr
-      } = await supabase.auth.getUser();
-
-      if (authErr) throw authErr;
-      if (!user) {
-        // not logged in - redirect to homepage / login
-        goto('/?message=login-required');
-        return;
-      }
-
-      userId = user.id;
-      email = user.email ?? '';
-      
-      // Get full name from user metadata
-      fullName = user.user_metadata?.full_name || '';
-
-      // Fetch profile row from 'profiles' table
-      const { data: profiles, error: profileErr } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
-        .limit(1)
-        .maybeSingle();
+        .single();
 
-      if (profileErr && profileErr.code !== 'PGRST116') {
-        console.warn('Profile fetch warning:', profileErr);
-      }
+      if (profileError) throw profileError;
 
-      if (profiles) {
-        username = profiles.username ?? '';
-        // Use full_name from metadata if available, otherwise use display_name from profile
-        if (!fullName && profiles.display_name) {
-          fullName = profiles.display_name;
-        }
-      }
+      fullName = profileData.full_name;
+      username = profileData.username;
+      email = profileData.email;
+      household_name = profileData.household_name;
+      household_admin = profileData.household_admin;
+      avatarUrl = profileData.avatar_url;
 
-      // Fetch household information from household_members and households tables
-      const { data: householdMember, error: memberErr } = await supabase
-        .from('household_members')
-        .select(`
-          household_id,
-          is_admin,
-          households (
-            id,
-            name,
-            created_by_email
-          )
-        `)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (memberErr && memberErr.code !== 'PGRST116') {
-        console.warn('Household member fetch warning:', memberErr);
-      }
-
-      if (householdMember) {
-        // Handle households as object (from join) or array
-        const household = Array.isArray(householdMember.households) 
-          ? householdMember.households[0] 
-          : householdMember.households;
-        
-        if (household) {
-          household_name = household.name || '';
-          
-          // Get household admin info
-          if (householdMember.is_admin) {
-            household_admin = fullName || email;
-          } else {
-            // Find the admin of this household
-            const { data: adminMember } = await supabase
-              .from('household_members')
-              .select('user_name, user_email')
-              .eq('household_id', householdMember.household_id)
-              .eq('is_admin', true)
-              .maybeSingle();
-            
-            if (adminMember) {
-              household_admin = adminMember.user_name || adminMember.user_email || '';
-            }
-          }
-        }
-      }
     } catch (err) {
-      console.error('Profile load error', err);
-      error = err?.message ?? 'Unable to load profile.';
+      error = 'Failed to load profile.';
+      console.error(err);
     } finally {
       loading = false;
     }
   });
 
+  async function uploadAvatar(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-  // Show leave household confirmation modal
+    try {
+      const fileName = `${crypto.randomUUID()}-${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      avatarUrl = urlData.publicUrl;
+
+      await supabase.from('profiles').update({ avatar_url: avatarUrl });
+
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upload image');
+    }
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  }
+
   function showLeaveHouseholdModal() {
     showLeaveModal = true;
   }
 
-  // Close modal
-  function closeLeaveModal() {
-    showLeaveModal = false;
-  }
-
-  // Leave household: removes user from household_members and redirects to join page
   async function confirmLeaveHousehold() {
     try {
-      showLeaveModal = false;
-      saving = true;
-      error = '';
+      leaveLoading = true;
 
-      // Remove user from household_members table
-      const { error: deleteErr } = await supabase
-        .from('household_members')
-        .delete()
-        .eq('user_id', userId);
-
-      if (deleteErr) throw deleteErr;
-
-      // Optionally clear household fields from profile for consistency
-      const { error: updErr } = await supabase
+      const { error: leaveError } = await supabase
         .from('profiles')
-        .update({ household_name: null, household_admin: null, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+        .update({ household_name: null, household_admin: null });
 
-      if (updErr) {
-        console.warn('Profile update warning:', updErr);
-        // Don't throw - the main operation (leaving household) succeeded
-      }
+      if (leaveError) throw leaveError;
 
-      // Redirect to join household page
-      goto('/join-household');
+      household_name = null;
+      household_admin = null;
+      showLeaveModal = false;
+
     } catch (err) {
-      console.error('Leave household error', err);
-      error = err?.message ?? 'Could not leave household.';
-      saving = false;
+      console.error(err);
+      alert('Failed to leave household.');
+    } finally {
+      leaveLoading = false;
     }
-  }
-
-  // Handle logout
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    goto('/');
   }
 </script>
 
@@ -180,10 +111,20 @@
       <div class="error">{error}</div>
     {/if}
 
+    <!-- Profile Photo Section -->
+    <section class="profile-photo">
+      <img class="profile-photo-img" src={avatarUrl || profileIcon} alt={fullName ? `${fullName}'s avatar` : 'User avatar'}/>
+
+      <label class="upload-btn">
+        Change Photo
+        <input type="file" accept="image/*" on:change={uploadAvatar} />
+      </label>
+    </section>
+
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <img class="avatar" src={profileIcon} alt="Profile avatar" />
+        <img class="avatar" src={avatarUrl || profileIcon} alt="Profile avatar" />
         <h1 class="name">{getUserDisplayName($user)}</h1>
       </div>
 
@@ -232,44 +173,39 @@
 
       {#if household_name}
         <div class="card-actions">
-          <button class="action-btn danger" on:click={showLeaveHouseholdModal}>Leave Household</button>
+          <button class="action-btn danger" on:click={showLeaveHouseholdModal}>
+            Leave Household
+          </button>
         </div>
       {/if}
     </section>
-
   {/if}
 
-  <!-- Bottom nav (fixed) -->
-  <BottomNav />
-</main>
+  {#if showLeaveModal}
+    <div class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="modal-title">Leave Household</h2>
+        <p class="modal-message">
+          Are you sure you want to leave this household?
+        </p>
 
-<!-- Leave Household Confirmation Modal -->
-{#if showLeaveModal}
-  <div 
-    class="modal-overlay" 
-    role="dialog" 
-    aria-modal="true"
-    aria-labelledby="modal-title"
-    tabindex="-1"
-    on:click={closeLeaveModal} 
-    on:keydown={(e) => e.key === 'Escape' && closeLeaveModal()}
-  >
-    <div class="modal-content" role="region" aria-label="Confirmation dialog content">
-      <h2 id="modal-title" class="modal-title">Leave Household?</h2>
-      <p class="modal-message">
-        Are you sure you want to leave {household_name || 'this household'}?
-      </p>
-      <div class="modal-actions">
-        <button class="modal-btn cancel" on:click={closeLeaveModal} disabled={saving}>
-          Cancel
-        </button>
-        <button class="modal-btn confirm" on:click={confirmLeaveHousehold} disabled={saving}>
-          {saving ? 'Leaving...' : 'Leave'}
-        </button>
+        <div class="modal-actions">
+          <button class="modal-btn cancel" on:click={() => (showLeaveModal = false)}>
+            Cancel
+          </button>
+
+          <button
+            class="modal-btn confirm"
+            disabled={leaveLoading}
+            on:click={confirmLeaveHousehold}
+          >
+            {leaveLoading ? 'Leaving…' : 'Leave'}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</main>
 
 <style>
   :global(body) {
@@ -282,10 +218,48 @@
   .page {
     max-width: 420px;
     margin: 0 auto;
-    padding: 28px 20px 110px; /* bottom padding to allow nav */
+    padding: 28px 20px 110px;
     min-height: 100vh;
     box-sizing: border-box;
   }
+
+  /* --- PROFILE PHOTO SECTION --- */
+
+  .profile-photo {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .profile-photo-img {
+    width: 120px;
+    height: 120px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 4px solid #eee;
+    margin-bottom: 12px;
+  }
+
+  .upload-btn {
+    display: inline-block;
+    background: #f4f4f4;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background 0.2s;
+  }
+
+  .upload-btn:hover {
+    background: #e3e3e3;
+  }
+
+  .upload-btn input {
+    display: none;
+  }
+
+  /* --- END PROFILE PHOTO SECTION --- */
 
   .loader {
     padding: 36px;
@@ -410,26 +384,6 @@
     background: #ffcdd2;
   }
 
-
-  /* small screens adjustments */
-  @media (max-width: 420px) {
-    .page {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
-    .name {
-      font-size: 28px;
-    }
-    .card {
-      padding: 18px;
-    }
-    .avatar {
-      width: 72px;
-      height: 72px;
-    }
-  }
-
-  /* Modal Styles */
   .modal-overlay {
     position: fixed;
     top: 0;
