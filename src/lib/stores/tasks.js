@@ -1,10 +1,53 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { supabase } from '$lib/supabase.js';
 
 // Create a writable store for tasks
 export const tasks = writable([]);
 export const loading = writable(false);
 export const error = writable(null);
+
+// Calculate points based on priority and difficulty
+function calculatePoints(priority, difficulty) {
+  // Priority points: low = 0, medium = 5, high = 10
+  const priorityPoints = {
+    low: 0,
+    medium: 5,
+    high: 10
+  };
+  
+  // Difficulty points: easy = 5, medium = 10, hard = 15
+  const difficultyPoints = {
+    easy: 5,
+    medium: 10,
+    hard: 15
+  };
+  
+  const priorityValue = priorityPoints[priority] || 0;
+  const difficultyValue = difficultyPoints[difficulty] || 0;
+  
+  return priorityValue + difficultyValue;
+}
+
+// Award or deduct points to a user
+async function updateUserPoints(householdId, userEmail, points) {
+  if (!userEmail || userEmail === 'unassigned' || !householdId) {
+    return;
+  }
+
+  try {
+    const { error: pointsError } = await supabase.rpc('add_user_points', {
+      p_household_id: householdId,
+      p_user_email: userEmail,
+      p_points: points
+    });
+
+    if (pointsError) {
+      console.error('Error updating user points:', pointsError);
+    }
+  } catch (err) {
+    console.error('Error updating user points:', err);
+  }
+}
 
 // Get all tasks for the current user's household
 export async function fetchTasks() {
@@ -40,7 +83,12 @@ export async function fetchTasks() {
     if (fetchError) {
       error.set(fetchError.message);
     } else {
-      tasks.set(data || []);
+      // Ensure completed is a boolean for all tasks
+      const normalizedTasks = (data || []).map(task => ({
+        ...task,
+        completed: Boolean(task.completed)
+      }));
+      tasks.set(normalizedTasks);
     }
   } catch (err) {
     error.set('Failed to fetch tasks');
@@ -95,6 +143,7 @@ export async function createTask(taskData) {
         created_by: user.email,
         created_by_name: userName,
         priority: taskData.priority || 'medium',
+        difficulty: taskData.difficulty || 'hard',
         household_id: householdMember.household_id
       }])
       .select()
@@ -119,7 +168,7 @@ export async function createTask(taskData) {
 
 // Update a task
 export async function updateTask(taskId, updates) {
-  loading.set(true);
+  // Don't set loading for task updates to avoid UI flicker
   error.set(null);
   
   try {
@@ -169,12 +218,19 @@ export async function updateTask(taskId, updates) {
       }
     }
 
+    // Ensure completed is a boolean
+    const updateData = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.completed !== undefined) {
+      updateData.completed = Boolean(updates.completed);
+    }
+
     const { data, error: updateError } = await supabase
       .from('tasks')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', taskId)
       .select()
       .single();
@@ -184,12 +240,19 @@ export async function updateTask(taskId, updates) {
       return null;
     }
 
-    // Update the task in the store
-    tasks.update(currentTasks => 
-      currentTasks.map(task => 
-        task.id === taskId ? data : task
-      )
-    );
+    // Ensure completed is a boolean in the returned data
+    if (data) {
+      data.completed = Boolean(data.completed);
+      
+      // Update the task in the store immediately
+      tasks.update(currentTasks => {
+        const updated = currentTasks.map(task => 
+          task.id === taskId ? { ...task, ...data, completed: Boolean(data.completed) } : task
+        );
+        return updated;
+      });
+    }
+    
     return data;
   } catch (err) {
     error.set('Failed to update task');
@@ -238,7 +301,75 @@ export async function deleteTask(taskId) {
 
 // Toggle task completion
 export async function toggleTaskCompletion(taskId, completed) {
-  return await updateTask(taskId, { completed });
+  // Don't set loading to avoid UI flicker since we're doing optimistic updates
+  error.set(null);
+  
+  try {
+    // Get the current tasks from the store using get()
+    const currentTasks = get(tasks);
+    
+    const task = currentTasks.find(t => t.id === taskId);
+    if (!task) {
+      const result = await updateTask(taskId, { completed });
+      return result;
+    }
+
+    // Check if completion status is actually changing
+    const wasCompleted = Boolean(task.completed);
+    const isNowCompleted = Boolean(completed);
+
+    // Update database first (faster) - don't wait for points update
+    const updatePromise = updateTask(taskId, { completed: isNowCompleted });
+    
+    // Update points in background (non-blocking)
+    if (wasCompleted !== isNowCompleted) {
+      updatePointsInBackground(task, isNowCompleted).catch(err => {
+        console.error('Error updating points in background:', err);
+      });
+    }
+
+    // Wait for the update to complete
+    const result = await updatePromise;
+    return result;
+  } catch (err) {
+    error.set('Failed to toggle task completion');
+    console.error('Error toggling task completion:', err);
+    // Revert optimistic update on error
+    const currentTasks = get(tasks);
+    const task = currentTasks.find(t => t.id === taskId);
+    if (task) {
+      tasks.update(currentTasks => 
+        currentTasks.map(t => 
+          t.id === taskId ? { ...t, completed: !completed } : t
+        )
+      );
+    }
+    return null;
+  }
+}
+
+// Helper function to update points in the background
+async function updatePointsInBackground(task, isNowCompleted) {
+  const points = calculatePoints(task.priority || 'medium', task.difficulty || 'hard');
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: householdMember } = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('user_id', user.id)
+    .single();
+
+  if (householdMember && task.assignee_email && task.assignee_email !== 'unassigned') {
+    if (isNowCompleted) {
+      // Award points when task is completed
+      await updateUserPoints(householdMember.household_id, task.assignee_email, points);
+    } else {
+      // Deduct points when task is uncompleted
+      await updateUserPoints(householdMember.household_id, task.assignee_email, -points);
+    }
+  }
 }
 
 // Get all users from the household (for assignment dropdown)
@@ -297,5 +428,63 @@ export async function getUsers() {
   } catch (err) {
     console.error('Error fetching users:', err);
     return [];
+  }
+}
+
+// Get user points for the current household
+export async function getUserPoints(userEmail = null) {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Error getting user:', authError);
+      return [];
+    }
+
+    // Get user's household
+    const { data: householdMember, error: householdError } = await supabase
+      .from('household_members')
+      .select('household_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (householdError || !householdMember) {
+      console.error('Error fetching household member:', householdError);
+      return [];
+    }
+
+    // Get points using the database function
+    const { data, error: pointsError } = await supabase.rpc('get_user_points', {
+      p_household_id: householdMember.household_id,
+      p_user_email: userEmail
+    });
+
+    if (pointsError) {
+      console.error('Error fetching user points:', pointsError);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user points:', err);
+    return [];
+  }
+}
+
+// Get current user's total points
+export async function getCurrentUserPoints() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return 0;
+    }
+
+    const points = await getUserPoints(user.email);
+    if (points && points.length > 0) {
+      return points[0].total_points || 0;
+    }
+    return 0;
+  } catch (err) {
+    console.error('Error fetching current user points:', err);
+    return 0;
   }
 }

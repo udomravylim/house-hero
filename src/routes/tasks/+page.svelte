@@ -16,6 +16,7 @@
   let newDueDate = '';
   let newAssignee = '';
   let newPriority = 'medium';
+  let newDifficulty = 'hard';
   let availableUsers = [];
 
   let authChecked = false;
@@ -112,8 +113,12 @@
     
     return filtered.sort((a, b) => {
       // First, sort by completion status (incomplete first)
-      if (a.completed !== b.completed) {
-        return a.completed - b.completed;
+      // Convert boolean to number: false = 0, true = 1
+      const aCompleted = a.completed ? 1 : 0;
+      const bCompleted = b.completed ? 1 : 0;
+      
+      if (aCompleted !== bCompleted) {
+        return aCompleted - bCompleted; // 0 (incomplete) comes before 1 (completed)
       }
       
       // If same completion status, sort by priority
@@ -133,7 +138,15 @@
     const id = ev.detail.id;
     const task = $tasks.find(t => t.id === id);
     if (task) {
-      await toggleTaskCompletion(id, !task.completed);
+      const newCompletedStatus = !task.completed;
+      // Optimistically update the UI immediately
+      tasks.update(currentTasks => 
+        currentTasks.map(t => 
+          t.id === id ? { ...t, completed: newCompletedStatus } : t
+        )
+      );
+      // Then update in the background
+      toggleTaskCompletion(id, newCompletedStatus);
     }
   }
 
@@ -183,7 +196,8 @@
       assignee_email: assigneeEmail,
       assignee_initial: assigneeInitial,
       assignee_name: assigneeName,
-      priority: newPriority
+      priority: newPriority,
+      difficulty: newDifficulty
     };
 
     const success = await createTask(taskData);
@@ -194,6 +208,7 @@
       newDueDate = '';
       newAssignee = '';
       newPriority = 'medium';
+      newDifficulty = 'hard';
       showAdd = false;
       
       // Refresh users list
@@ -259,9 +274,14 @@
       </select>
       <select bind:value={newPriority}>
         <option value="">Select priority</option>
-        <option value="low">Low Priority</option>
-        <option value="medium">Medium Priority</option>
-        <option value="high">High Priority</option>
+        <option value="low">Low Priority (0 points)</option>
+        <option value="medium">Medium Priority (5 points)</option>
+        <option value="high">High Priority (10 points)</option>
+      </select>
+      <select bind:value={newDifficulty}>
+        <option value="hard">Hard (15 points)</option>
+        <option value="medium">Medium (10 points)</option>
+        <option value="easy">Easy (5 points)</option>
       </select>
       <button on:click={addTask} disabled={$loading}>Add Task</button>
     </div>
@@ -315,41 +335,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 }
-
-body {
-  font-family: inherit;
-}
   
   h1 {
     font-size: 32px;
     font-weight: 800;
     margin: 0;
-  }
-  
-  .logout-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    color: #6c757d;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.15s ease;
-  }
-  
-  .logout-btn:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-    color: #495057;
-  }
-  
-  .logout-btn svg {
-    width: 16px;
-    height: 16px;
   }
   .controls {
     display: flex;
