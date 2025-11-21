@@ -279,6 +279,7 @@
         <option value="high">High Priority (10 points)</option>
       </select>
       <select bind:value={newDifficulty}>
+        <option value="">Select difficulty</option>
         <option value="hard">Hard (15 points)</option>
         <option value="medium">Medium (10 points)</option>
         <option value="easy">Easy (5 points)</option>
