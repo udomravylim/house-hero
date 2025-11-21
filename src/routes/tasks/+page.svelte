@@ -15,8 +15,8 @@
   let newDescription = '';
   let newDueDate = '';
   let newAssignee = '';
-  let newPriority = 'medium';
-  let newDifficulty = 'hard';
+  let newPriority = '';
+  let newDifficulty = '';
   let availableUsers = [];
 
   let authChecked = false;
@@ -196,8 +196,8 @@
       assignee_email: assigneeEmail,
       assignee_initial: assigneeInitial,
       assignee_name: assigneeName,
-      priority: newPriority,
-      difficulty: newDifficulty
+      priority: newPriority || 'medium',
+      difficulty: newDifficulty || 'hard'
     };
 
     const success = await createTask(taskData);
@@ -207,8 +207,8 @@
       newDescription = '';
       newDueDate = '';
       newAssignee = '';
-      newPriority = 'medium';
-      newDifficulty = 'hard';
+      newPriority = '';
+      newDifficulty = '';
       showAdd = false;
       
       // Refresh users list
