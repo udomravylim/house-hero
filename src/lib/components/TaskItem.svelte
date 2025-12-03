@@ -185,6 +185,8 @@
     <div class="right">
       {#if task.assignee_email === 'unassigned' || !task.assignee_email}
         <div class="avatar unassigned">?</div>
+      {:else if task.assignee_picture_url}
+        <img class="avatar avatar-img" src={task.assignee_picture_url} alt={task.assignee_name || task.assignee_email} />
       {:else}
         <div class="avatar">{task.assignee_initial}</div>
       {/if}
@@ -260,6 +262,11 @@
                 <span class="assignee-avatar">?</span>
                 Unassigned
               </span>
+            {:else if task.assignee_picture_url}
+              <span class="assignee">
+                <img class="assignee-avatar assignee-avatar-img" src={task.assignee_picture_url} alt={task.assignee_name || task.assignee_email} />
+                {task.assignee_name || task.assignee_email}
+              </span>
             {:else}
               <span class="assignee">
                 <span class="assignee-avatar">{task.assignee_initial}</span>
@@ -288,7 +295,11 @@
           <div class="meta-row">
             <span class="meta-label">Created by</span>
             <span class="creator">
-              <span class="creator-avatar">{task.created_by_name ? task.created_by_name.charAt(0).toUpperCase() : task.created_by.charAt(0).toUpperCase()}</span>
+              {#if task.created_by_picture_url}
+                <img class="creator-avatar creator-avatar-img" src={task.created_by_picture_url} alt={task.created_by_name || task.created_by} />
+              {:else}
+                <span class="creator-avatar">{task.created_by_name ? task.created_by_name.charAt(0).toUpperCase() : task.created_by.charAt(0).toUpperCase()}</span>
+              {/if}
               {task.created_by_name || task.created_by}
             </span>
           </div>
@@ -467,6 +478,13 @@
     color: white;
     font-weight: 700;
     font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+
+  .avatar-img {
+    object-fit: cover;
+    background: none;
+    padding: 0;
   }
   .actions {
     display: flex;
@@ -820,6 +838,13 @@
     font-weight: 700;
     font-size: 0.875rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
+  }
+
+  .assignee-avatar-img, .creator-avatar-img {
+    object-fit: cover;
+    background: none;
+    padding: 0;
   }
 
   .assignee.unassigned .assignee-avatar {

@@ -80,6 +80,47 @@ export async function fetchTasks() {
       .eq('household_id', householdMember.household_id)
       .order('created_at', { ascending: false });
 
+    // Fetch profile pictures for assignees and creators
+    if (data && data.length > 0) {
+      // Get all household members to map emails to user_ids
+      const { data: allMembers } = await supabase
+        .from('household_members')
+        .select('user_id, user_email')
+        .eq('household_id', householdMember.household_id);
+
+      if (allMembers && allMembers.length > 0) {
+        // Get unique user IDs
+        const userIds = [...new Set(allMembers.map(m => m.user_id))];
+        
+        // Fetch profile pictures for all household members
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, profile_picture_url')
+          .in('id', userIds);
+
+        // Create email to profile picture mapping
+        const emailToPicture = {};
+        if (profiles && allMembers) {
+          allMembers.forEach(member => {
+            const profile = profiles.find(p => p.id === member.user_id);
+            if (profile?.profile_picture_url) {
+              emailToPicture[member.user_email] = profile.profile_picture_url;
+            }
+          });
+        }
+
+        // Add profile picture URLs to tasks
+        data.forEach(task => {
+          if (task.assignee_email && task.assignee_email !== 'unassigned') {
+            task.assignee_picture_url = emailToPicture[task.assignee_email] || null;
+          }
+          if (task.created_by) {
+            task.created_by_picture_url = emailToPicture[task.created_by] || null;
+          }
+        });
+      }
+    }
+
     if (fetchError) {
       error.set(fetchError.message);
     } else {
@@ -127,9 +168,63 @@ export async function createTask(taskData) {
     const userInitial = userName.charAt(0).toUpperCase();
 
     // Handle assignee data - if unassigned, set to null, otherwise use provided or default to current user
-    const assigneeEmail = taskData.assignee_email || user.email;
+    let assigneeEmail = taskData.assignee_email;
+    if (!assigneeEmail || assigneeEmail === '' || assigneeEmail === 'me') {
+      assigneeEmail = user.email;
+    }
     const assigneeInitial = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_initial || userInitial);
     const assigneeName = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_name || userName);
+
+    // Fetch profile picture URLs for assignee and creator
+    let assigneePictureUrl = null;
+    let createdByPictureUrl = null;
+
+    // Get assignee profile picture if assigned
+    if (assigneeEmail && assigneeEmail !== 'unassigned') {
+      // If assigning to current user, use their ID directly
+      if (assigneeEmail === user.email) {
+        const { data: assigneeProfile } = await supabase
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        if (assigneeProfile?.profile_picture_url) {
+          assigneePictureUrl = assigneeProfile.profile_picture_url;
+        }
+      } else {
+        // For other users, find them in household_members
+        const { data: assigneeMember } = await supabase
+          .from('household_members')
+          .select('user_id')
+          .eq('household_id', householdMember.household_id)
+          .eq('user_email', assigneeEmail)
+          .maybeSingle();
+        
+        if (assigneeMember) {
+          const { data: assigneeProfile } = await supabase
+            .from('profiles')
+            .select('profile_picture_url')
+            .eq('id', assigneeMember.user_id)
+            .maybeSingle();
+          
+          if (assigneeProfile?.profile_picture_url) {
+            assigneePictureUrl = assigneeProfile.profile_picture_url;
+          }
+        }
+      }
+    }
+
+    // Get creator profile picture
+    const { data: creatorProfile } = await supabase
+      .from('profiles')
+      .select('profile_picture_url')
+      .eq('id', user.id)
+      .maybeSingle();
+    
+    if (creatorProfile?.profile_picture_url) {
+      createdByPictureUrl = creatorProfile.profile_picture_url;
+    }
 
     const { data, error: insertError } = await supabase
       .from('tasks')
@@ -148,6 +243,12 @@ export async function createTask(taskData) {
       }])
       .select()
       .single();
+
+    // Add profile picture URLs to the returned task data
+    if (data) {
+      data.assignee_picture_url = assigneePictureUrl;
+      data.created_by_picture_url = createdByPictureUrl;
+    }
 
     if (insertError) {
       error.set(insertError.message);
@@ -200,11 +301,24 @@ export async function updateTask(taskId, updates) {
           const userName = user.user_metadata?.full_name || user.email.split('@')[0];
           updates.assignee_name = userName;
           updates.assignee_initial = userName.charAt(0).toUpperCase();
+          
+          // Fetch current user's profile picture
+          const { data: currentUserProfile } = await supabase
+            .from('profiles')
+            .select('profile_picture_url')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (currentUserProfile?.profile_picture_url) {
+            updates.assignee_picture_url = currentUserProfile.profile_picture_url;
+          } else {
+            updates.assignee_picture_url = null;
+          }
         } else {
           // Find the assignee member info
           const { data: assigneeMember } = await supabase
             .from('household_members')
-            .select('user_email, user_name')
+            .select('user_email, user_name, user_id')
             .eq('household_id', householdMember.household_id)
             .eq('user_email', updates.assignee_email)
             .single();
@@ -213,6 +327,19 @@ export async function updateTask(taskId, updates) {
             const assigneeName = assigneeMember.user_name || updates.assignee_email.split('@')[0];
             updates.assignee_name = assigneeName;
             updates.assignee_initial = assigneeName.charAt(0).toUpperCase();
+            
+            // Fetch assignee profile picture
+            const { data: assigneeProfile } = await supabase
+              .from('profiles')
+              .select('profile_picture_url')
+              .eq('id', assigneeMember.user_id)
+              .maybeSingle();
+            
+            if (assigneeProfile?.profile_picture_url) {
+              updates.assignee_picture_url = assigneeProfile.profile_picture_url;
+            } else {
+              updates.assignee_picture_url = null;
+            }
           }
         }
       }
@@ -243,6 +370,11 @@ export async function updateTask(taskId, updates) {
     // Ensure completed is a boolean in the returned data
     if (data) {
       data.completed = Boolean(data.completed);
+      
+      // If assignee_picture_url was updated, make sure it's included
+      if (updates.assignee_picture_url !== undefined) {
+        data.assignee_picture_url = updates.assignee_picture_url;
+      }
       
       // Update the task in the store immediately
       tasks.update(currentTasks => {
@@ -414,6 +546,23 @@ export async function getUsers() {
       return [];
     }
 
+    // Fetch profile pictures for household members
+    const userIds = householdMembers.map(m => m.user_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, profile_picture_url')
+      .in('id', userIds);
+
+    // Create user_id to profile picture mapping
+    const userIdToPicture = {};
+    if (profiles) {
+      profiles.forEach(profile => {
+        if (profile.profile_picture_url) {
+          userIdToPicture[profile.id] = profile.profile_picture_url;
+        }
+      });
+    }
+
     // Return the household members as a list of users, excluding the current user
     // (since "Assign to me" option is separate in the UI)
     const users = householdMembers
@@ -421,7 +570,8 @@ export async function getUsers() {
       .map(member => ({
         email: member.user_email,
         name: member.user_name || member.user_email.split('@')[0],
-        initial: (member.user_name || member.user_email.split('@')[0]).charAt(0).toUpperCase()
+        initial: (member.user_name || member.user_email.split('@')[0]).charAt(0).toUpperCase(),
+        profile_picture_url: userIdToPicture[member.user_id] || null
       }));
 
     return users;
