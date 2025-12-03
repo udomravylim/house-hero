@@ -18,6 +18,7 @@
   let newPriority = '';
   let newDifficulty = '';
   let availableUsers = [];
+  let userProfilePictureUrl = null;
 
   let authChecked = false;
 
@@ -77,6 +78,23 @@
     } catch (err) {
       console.error('Error loading users on mount:', err);
       availableUsers = [];
+    }
+
+    // Fetch current user's profile picture
+    if (currentUser) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+        
+        if (profile?.profile_picture_url) {
+          userProfilePictureUrl = profile.profile_picture_url;
+        }
+      } catch (err) {
+        console.error('Error fetching profile picture:', err);
+      }
     }
   });
 
@@ -231,7 +249,11 @@
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
     <button type="button" class="profile-button" aria-label="Profile" on:click={() => goto('/profile')}>
-    <img src={profileIcon} alt="Profile"/>
+      {#if userProfilePictureUrl}
+        <img src={userProfilePictureUrl} alt="Profile" class="profile-picture" />
+      {:else}
+        <img src={profileIcon} alt="Profile"/>
+      {/if}
     </button>
   </header>
 
@@ -468,9 +490,30 @@
   .profile-button {
     background: none;
     border: none;
-    padding: 6px 12px;
+    padding: 0;
     border-radius: 999px;
     cursor: pointer;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+
+  .profile-button:hover {
+    transform: scale(1.05);
+  }
+
+  .profile-button img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-picture {
+    border-radius: 50%;
   }
 
 </style>

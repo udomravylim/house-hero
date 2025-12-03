@@ -19,6 +19,8 @@
   let email = '';
   let household_name = '';
   let household_admin = '';
+  let profilePictureUrl = null;
+  let uploadingPicture = false;
 
   // Fetch the current user & profile on mount
   onMount(async () => {
@@ -59,6 +61,7 @@
 
       if (profiles) {
         username = profiles.username ?? '';
+        profilePictureUrl = profiles.profile_picture_url ?? null;
         // Use full_name from metadata if available, otherwise use display_name from profile
         if (!fullName && profiles.display_name) {
           fullName = profiles.display_name;
@@ -170,6 +173,84 @@
     await supabase.auth.signOut();
     goto('/');
   }
+
+  // Handle profile picture upload
+  async function handlePictureUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file || !userId) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      error = 'Please select an image file';
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      error = 'Image size must be less than 5MB';
+      return;
+    }
+
+    try {
+      uploadingPicture = true;
+      error = '';
+
+      // Delete old picture if it exists
+      if (profilePictureUrl) {
+        const oldPath = profilePictureUrl.split('/').slice(-2).join('/');
+        await supabase.storage.from('profile-pictures').remove([oldPath]);
+      }
+
+      // Create a unique file path: userId/filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('profile-pictures')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('profile-pictures')
+        .getPublicUrl(fileName);
+
+      const publicUrl = urlData.publicUrl;
+
+      // Update profile in database
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          profile_picture_url: publicUrl,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'id'
+        });
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      profilePictureUrl = publicUrl;
+    } catch (err) {
+      console.error('Profile picture upload error', err);
+      error = err?.message ?? 'Failed to upload profile picture';
+    } finally {
+      uploadingPicture = false;
+      // Reset file input
+      event.target.value = '';
+    }
+  }
+
+  // Get profile picture source (use uploaded picture or default icon)
+  function getProfilePictureSrc() {
+    return profilePictureUrl || profileIcon;
+  }
 </script>
 
 <main class="page">
@@ -183,7 +264,29 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <img class="avatar" src={profileIcon} alt="Profile avatar" />
+        <label class="avatar-container" for="profile-picture-input">
+          <img class="avatar" src={getProfilePictureSrc()} alt="Profile avatar" />
+          {#if uploadingPicture}
+            <div class="upload-overlay">
+              <div class="upload-spinner"></div>
+            </div>
+          {:else}
+            <div class="avatar-edit-icon" title="Change profile picture">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </div>
+          {/if}
+        </label>
+        <input
+          id="profile-picture-input"
+          type="file"
+          accept="image/*"
+          on:change={handlePictureUpload}
+          style="display: none;"
+          disabled={uploadingPicture}
+        />
         <h1 class="name">{getUserDisplayName($user)}</h1>
       </div>
 
@@ -315,12 +418,73 @@
     gap: 18px;
   }
 
+  .avatar-container {
+    position: relative;
+    cursor: pointer;
+    display: inline-block;
+    border-radius: 999px;
+    transition: transform 0.2s;
+  }
+
+  .avatar-container:hover {
+    transform: scale(1.05);
+  }
+
+  .avatar-container:hover .avatar-edit-icon {
+    opacity: 1;
+  }
+
   .avatar {
     width: 64px;
     height: 64px;
     border-radius: 999px;
     padding: 6px;
     box-sizing: content-box;
+    object-fit: cover;
+    display: block;
+  }
+
+  .avatar-edit-icon {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: #4CAF50;
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .upload-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .upload-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .name {
