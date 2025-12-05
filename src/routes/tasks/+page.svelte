@@ -20,14 +20,15 @@
 
   let authChecked = false;
 
-  // Check for add query parameter immediately (reactive)
+  let showFilters = false;
+  let filterPriority = '';
+  let filterCompleted = '';
+
   $: if ($page.url.searchParams.get('add') === 'true' && !showAdd) {
     showAdd = true;
-    // Remove the query parameter from URL
     goto('/tasks', { replaceState: true });
   }
 
-  // Refresh users when form opens and auth is checked
   $: if (showAdd && availableUsers.length === 0 && authChecked) {
     getUsers().then(users => {
       availableUsers = users;
@@ -37,16 +38,13 @@
   }
 
   onMount(async () => {
-    // Wait for auth to initialize
     await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Check if user is authenticated
+
     if (!$user) {
       goto('/?message=login-required');
       return;
     }
-    
-    // Check if user is in a household
+
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
       const { data: householdMembership, error: membershipError } = await supabase
@@ -66,11 +64,10 @@
         return;
       }
     }
-    
+
     authChecked = true;
     await fetchTasks();
-    
-    // Load users after everything else is ready
+
     try {
       availableUsers = await getUsers();
     } catch (err) {
@@ -79,62 +76,54 @@
     }
   });
 
-  // Handle authentication changes only after initial check
   $: if (authChecked && typeof window !== 'undefined' && $user === null) {
     goto('/?message=login-required');
   }
 
-  // Use availableUsers directly since getUsers() already filters out current user
   $: otherUsers = availableUsers;
 
-  // Reactive filtered and sorted tasks
   $: filteredTasks = (() => {
     const currentUser = $user?.email;
     if (!currentUser || !$tasks || $tasks.length === 0) return [];
     
-    // Filter tasks based on view
-    let filtered = $tasks.filter((task) => {
-      if (view === 'all') {
-        // Show all tasks in the household
-        return true;
-      } else if (view === 'mine') {
-        // Show only tasks assigned to current user
-        return task.assignee_email === currentUser;
-      } else if (view === 'unassigned') {
-        // Show only unassigned tasks
-        return task.assignee_email === 'unassigned' || !task.assignee_email;
-      }
+    let filtered = $tasks.filter(task => {
+      if (view === 'all') return true;
+      if (view === 'mine') return task.assignee_email === currentUser;
+      if (view === 'unassigned') return task.assignee_email === 'unassigned' || !task.assignee_email;
       return true;
     });
-    
-    // Sort tasks: incomplete first, then by priority (high → medium → low), then completed
+
+    if (filterPriority) {
+      filtered = filtered.filter(t => (t.priority || '').toLowerCase() === filterPriority);
+    }
+
+    if (filterCompleted) {
+      if (filterCompleted === 'completed') filtered = filtered.filter(t => t.completed);
+      else if (filterCompleted === 'uncompleted') filtered = filtered.filter(t => !t.completed);
+    }
+
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-    
+
     return filtered.sort((a, b) => {
-      // First, sort by completion status (incomplete first)
-      if (a.completed !== b.completed) {
-        return a.completed - b.completed;
-      }
-      
-      // If same completion status, sort by priority
-      const aPriority = priorityOrder[a.priority] ?? 1; // Default to medium if undefined
+      if (a.completed !== b.completed) return a.completed - b.completed;
+
+      const aPriority = priorityOrder[a.priority] ?? 1;
       const bPriority = priorityOrder[b.priority] ?? 1;
-      
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
-      }
-      
-      // If same priority, maintain original order
+
+      if (aPriority !== bPriority) return aPriority - bPriority;
+
       return 0;
     });
   })();
 
+  function toggleFilter() {
+    showFilters = !showFilters;
+  }
+
   async function handleToggle(ev) {
     const id = ev.detail.id;
     const task = $tasks.find(t => t.id === id);
-    if (task) {
-      await toggleTaskCompletion(id, !task.completed);
-    }
+    if (task) await toggleTaskCompletion(id, !task.completed);
   }
 
   async function handleEdit(ev) {
@@ -149,27 +138,21 @@
 
   async function addTask() {
     if (!newTitle.trim()) return;
-    
+
     const currentUser = $user?.email;
     if (!currentUser) return;
 
-    // Determine assignee information based on selection
     let assigneeEmail = null;
     let assigneeInitial = null;
     let assigneeName = null;
 
     if (newAssignee === 'unassigned') {
-      // Leave task unassigned
       assigneeEmail = 'unassigned';
-      assigneeInitial = null;
-      assigneeName = null;
     } else if (newAssignee === 'me' || newAssignee === '') {
-      // Assign to current user
       assigneeEmail = currentUser;
       assigneeInitial = getUserDisplayName($user).charAt(0).toUpperCase();
       assigneeName = getUserDisplayName($user);
     } else if (newAssignee) {
-      // Assign to selected user
       const selectedUser = availableUsers.find(u => u.email === newAssignee);
       assigneeEmail = newAssignee;
       assigneeInitial = selectedUser?.initial || newAssignee.charAt(0).toUpperCase();
@@ -188,15 +171,13 @@
 
     const success = await createTask(taskData);
     if (success) {
-      // Reset form
       newTitle = '';
       newDescription = '';
       newDueDate = '';
       newAssignee = '';
       newPriority = 'medium';
       showAdd = false;
-      
-      // Refresh users list
+
       availableUsers = await getUsers();
     }
   }
@@ -213,22 +194,24 @@
 
 <main>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
     <button type="button" class="profile-button" aria-label="Profile" on:click={() => goto('/profile')}>
-    <img src={profileIcon} alt="Profile"/>
+      <img src={profileIcon} alt="Profile" />
     </button>
   </header>
 
   <section class="controls">
     <div class="tasks-label">
       <strong>Tasks</strong>
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="#222" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-        <path d="M10 18h4" />
-        <path d="M3 6h18" />
-        <path d="M6 12h12" />
-      </svg>
+      <button class="filter-btn" aria-label="Open filters" on:click={toggleFilter}>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M10 18h4" />
+          <path d="M3 6h18" />
+          <path d="M6 12h12" />
+        </svg>
+      </button>
     </div>
 
     <div class="tabs">
@@ -236,19 +219,20 @@
       <button class:active={view === 'mine'} on:click={() => (view = 'mine')}>Assigned to Me</button>
       <button class:active={view === 'unassigned'} on:click={() => (view = 'unassigned')}>Unassigned</button>
     </div>
-
   </section>
 
   {#if showAdd}
     <div class="add-form">
       <input placeholder="Task title" bind:value={newTitle} required />
       <textarea placeholder="Description (optional)" bind:value={newDescription}></textarea>
+
       <div class="date-input-wrapper">
         <input type="date" bind:value={newDueDate} class:has-value={newDueDate} />
         {#if !newDueDate}
           <span class="date-placeholder">Select due date</span>
         {/if}
       </div>
+
       <select bind:value={newAssignee}>
         <option value="">Assign task to someone</option>
         <option value="unassigned">Unassigned</option>
@@ -257,19 +241,54 @@
           <option value={user.email}>Assign to {user.name}</option>
         {/each}
       </select>
+
       <select bind:value={newPriority}>
         <option value="">Select priority</option>
         <option value="low">Low Priority</option>
         <option value="medium">Medium Priority</option>
         <option value="high">High Priority</option>
       </select>
+
       <button on:click={addTask} disabled={$loading}>Add Task</button>
     </div>
   {/if}
 
   {#if $error}
-    <div class="error-message">
-      {$error}
+    <div class="error-message">{$error}</div>
+  {/if}
+
+  {#if showFilters}
+    <div class="filter-overlay" on:click={() => (showFilters = false)}></div>
+
+    <div class="filter-sheet" role="dialog" aria-modal="true" aria-label="Filters">
+      <div class="filter-header">
+        <div class="filter-title">Filters</div>
+        <button class="close-filter" on:click={() => (showFilters = false)} aria-label="Close filters">Close</button>
+      </div>
+
+      <div class="filter-content">
+        <label class="filter-group">
+          <div class="filter-label">Priority</div>
+          <div class="priority-options">
+            <button class:active={filterPriority === 'high'} on:click={() => filterPriority = filterPriority === 'high' ? '' : 'high'}>High</button>
+            <button class:active={filterPriority === 'medium'} on:click={() => filterPriority = filterPriority === 'medium' ? '' : 'medium'}>Medium</button>
+            <button class:active={filterPriority === 'low'} on:click={() => filterPriority = filterPriority === 'low' ? '' : 'low'}>Low</button>
+          </div>
+        </label>
+
+        <label class="filter-group">
+          <div class="filter-label">Completion</div>
+          <div class="due-options">
+            <button class:active={filterCompleted === 'completed'} on:click={() => filterCompleted = filterCompleted === 'completed' ? '' : 'completed'}>Completed</button>
+            <button class:active={filterCompleted === 'uncompleted'} on:click={() => filterCompleted = filterCompleted === 'uncompleted' ? '' : 'uncompleted'}>Uncompleted</button>
+          </div>
+        </label>
+
+        <div class="filter-actions">
+          <button class="clear-btn" on:click={() => { filterPriority = ''; filterCompleted = ''; }}>Clear</button>
+          <button class="apply-btn" on:click={() => (showFilters = false)}>Apply</button>
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -283,12 +302,17 @@
       </div>
     {:else}
       {#each filteredTasks as task (task.id)}
-        <TaskItem {task} {availableUsers} currentUserEmail={$user?.email} on:toggle={handleToggle} on:edit={handleEdit} on:delete={handleDelete} />
+        <TaskItem
+          {task}
+          {availableUsers}
+          currentUserEmail={$user?.email}
+          on:toggle={handleToggle}
+          on:edit={handleEdit}
+          on:delete={handleDelete}
+        />
       {/each}
     {/if}
   </section>
-
-  <!-- <a href="/leaderboard">Go to Leaderboard</a> -->
 
   <BottomNav 
     onAddClick={() => (showAdd = !showAdd)} 
@@ -305,62 +329,55 @@
     margin: 0 auto;
     padding: 28px 20px 100px;
   }
+
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  }
+
+  body {
+    font-family: inherit;
+  }
+
   header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 18px;
   }
-  :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-}
 
-body {
-  font-family: inherit;
-}
-  
   h1 {
     font-size: 32px;
     font-weight: 800;
     margin: 0;
   }
-  
-  .logout-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    color: #6c757d;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.15s ease;
-  }
-  
-  .logout-btn:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-    color: #495057;
-  }
-  
-  .logout-btn svg {
-    width: 16px;
-    height: 16px;
-  }
+
   .controls {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
   }
+
+  .tasks-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .filter-btn {
+    background: none;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
   .tabs {
     display: flex;
     gap: 8px;
   }
+
   .tabs button {
     background: white;
     border: 1px solid #ddd;
@@ -368,10 +385,12 @@ body {
     border-radius: 999px;
     cursor: pointer;
   }
+
   .tabs button.active {
     background: black;
     color: white;
   }
+
   .add-form {
     margin: 10px 0;
     display: flex;
@@ -381,16 +400,21 @@ body {
     padding: 15px;
     border-radius: 8px;
   }
-  .add-form input, .add-form textarea, .add-form select {
+
+  .add-form input,
+  .add-form textarea,
+  .add-form select {
     padding: 10px;
     border-radius: 6px;
     border: 1px solid #ddd;
     font-size: 14px;
   }
+
   .date-input-wrapper {
     position: relative;
     width: 100%;
   }
+
   .date-input-wrapper input[type="date"] {
     width: 100%;
     position: relative;
@@ -400,33 +424,7 @@ body {
     font-size: 14px;
     box-sizing: border-box;
   }
-  .date-input-wrapper input[type="date"]:not(.has-value) {
-    color: transparent;
-  }
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit {
-    color: transparent;
-  }
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-fields-wrapper {
-    color: transparent;
-  }
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-text {
-    color: transparent;
-  }
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-month-field,
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-day-field,
-  .date-input-wrapper input[type="date"]:not(.has-value)::-webkit-datetime-edit-year-field {
-    color: transparent;
-  }
-  .date-input-wrapper input[type="date"].has-value {
-    color: inherit;
-  }
-  .date-input-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
-    position: absolute;
-    right: 10px;
-    z-index: 2;
-    cursor: pointer;
-    opacity: 1;
-  }
+
   .date-placeholder {
     position: absolute;
     left: 10px;
@@ -435,12 +433,8 @@ body {
     color: #999;
     pointer-events: none;
     font-size: 14px;
-    z-index: 1;
   }
-  .add-form textarea {
-    min-height: 60px;
-    resize: vertical;
-  }
+
   .add-form button {
     padding: 10px;
     background: #27ae60;
@@ -450,21 +444,18 @@ body {
     cursor: pointer;
     font-weight: 600;
   }
-  .add-form button:disabled {
-    background: #bdc3c7;
-    cursor: not-allowed;
-  }
+
   .list {
     margin-top: 8px;
   }
-  .loading, .empty-state {
+
+  .empty-state,
+  .loading {
     text-align: center;
     padding: 40px 20px;
     color: #666;
   }
-  .empty-state p {
-    margin: 8px 0;
-  }
+
   .error-message {
     background: #ffebee;
     color: #c62828;
@@ -482,4 +473,124 @@ body {
     cursor: pointer;
   }
 
+  .filter-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 60;
+  }
+
+  .filter-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    background: #fff;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.12);
+    padding: 16px;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 420px;
+    margin: 0 auto 8px;
+  }
+
+  .filter-title {
+    font-weight: 700;
+    font-size: 16px;
+  }
+
+  .close-filter {
+    background: none;
+    border: none;
+    color: #555;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+ .filter-content {
+  /* width: 100%; */
+  max-width: 420px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: slideIn 0.2s ease-out;
+}
+
+
+  @keyframes slideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-label {
+    font-weight: 700;
+    font-size: 13px;
+    color: #333;
+  }
+
+  .priority-options,
+  .due-options {
+    display: flex;
+    gap: 8px;
+  }
+
+  .priority-options button,
+  .due-options button {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #fafafa;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .priority-options button.active,
+  .due-options button.active {
+    background: #222;
+    color: white;
+    border-color: #222;
+  }
+
+  .filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .clear-btn {
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .apply-btn {
+    background: #222;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+  }
 </style>
