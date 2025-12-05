@@ -15,8 +15,10 @@
   let newDescription = '';
   let newDueDate = '';
   let newAssignee = '';
-  let newPriority = 'medium';
+  let newPriority = '';
+  let newDifficulty = '';
   let availableUsers = [];
+  let userProfilePictureUrl = null;
 
   let authChecked = false;
 
@@ -74,6 +76,23 @@
       console.error('Error loading users on mount:', err);
       availableUsers = [];
     }
+
+    // Fetch current user's profile picture
+    if (currentUser) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+        
+        if (profile?.profile_picture_url) {
+          userProfilePictureUrl = profile.profile_picture_url;
+        }
+      } catch (err) {
+        console.error('Error fetching profile picture:', err);
+      }
+    }
   });
 
   $: if (authChecked && typeof window !== 'undefined' && $user === null) {
@@ -105,9 +124,17 @@
     const priorityOrder = { high: 0, medium: 1, low: 2 };
 
     return filtered.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed - b.completed;
-
-      const aPriority = priorityOrder[a.priority] ?? 1;
+      // First, sort by completion status (incomplete first)
+      // Convert boolean to number: false = 0, true = 1
+      const aCompleted = a.completed ? 1 : 0;
+      const bCompleted = b.completed ? 1 : 0;
+      
+      if (aCompleted !== bCompleted) {
+        return aCompleted - bCompleted; // 0 (incomplete) comes before 1 (completed)
+      }
+      
+      // If same completion status, sort by priority
+      const aPriority = priorityOrder[a.priority] ?? 1; // Default to medium if undefined
       const bPriority = priorityOrder[b.priority] ?? 1;
 
       if (aPriority !== bPriority) return aPriority - bPriority;
@@ -123,7 +150,17 @@
   async function handleToggle(ev) {
     const id = ev.detail.id;
     const task = $tasks.find(t => t.id === id);
-    if (task) await toggleTaskCompletion(id, !task.completed);
+    if (task) {
+      const newCompletedStatus = !task.completed;
+      // Optimistically update the UI immediately
+      tasks.update(currentTasks => 
+        currentTasks.map(t => 
+          t.id === id ? { ...t, completed: newCompletedStatus } : t
+        )
+      );
+      // Then update in the background
+      toggleTaskCompletion(id, newCompletedStatus);
+    }
   }
 
   async function handleEdit(ev) {
@@ -166,7 +203,8 @@
       assignee_email: assigneeEmail,
       assignee_initial: assigneeInitial,
       assignee_name: assigneeName,
-      priority: newPriority
+      priority: newPriority || 'medium',
+      difficulty: newDifficulty || 'hard'
     };
 
     const success = await createTask(taskData);
@@ -175,7 +213,8 @@
       newDescription = '';
       newDueDate = '';
       newAssignee = '';
-      newPriority = 'medium';
+      newPriority = '';
+      newDifficulty = '';
       showAdd = false;
 
       availableUsers = await getUsers();
@@ -198,7 +237,11 @@
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
     <button type="button" class="profile-button" aria-label="Profile" on:click={() => goto('/profile')}>
-      <img src={profileIcon} alt="Profile" />
+      {#if userProfilePictureUrl}
+        <img src={userProfilePictureUrl} alt="Profile" class="profile-picture" />
+      {:else}
+        <img src={profileIcon} alt="Profile"/>
+      {/if}
     </button>
   </header>
 
@@ -244,9 +287,15 @@
 
       <select bind:value={newPriority}>
         <option value="">Select priority</option>
-        <option value="low">Low Priority</option>
-        <option value="medium">Medium Priority</option>
-        <option value="high">High Priority</option>
+        <option value="low">Low Priority (0 points)</option>
+        <option value="medium">Medium Priority (5 points)</option>
+        <option value="high">High Priority (10 points)</option>
+      </select>
+      <select bind:value={newDifficulty}>
+        <option value="">Select difficulty</option>
+        <option value="hard">Hard (15 points)</option>
+        <option value="medium">Medium (10 points)</option>
+        <option value="easy">Easy (5 points)</option>
       </select>
 
       <button on:click={addTask} disabled={$loading}>Add Task</button>
@@ -345,13 +394,16 @@
     align-items: center;
     margin-bottom: 18px;
   }
-
+  :root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+  
   h1 {
     font-size: 32px;
     font-weight: 800;
     margin: 0;
   }
-
   .controls {
     display: flex;
     align-items: center;
@@ -468,9 +520,30 @@
   .profile-button {
     background: none;
     border: none;
-    padding: 6px 12px;
+    padding: 0;
     border-radius: 999px;
     cursor: pointer;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+
+  .profile-button:hover {
+    transform: scale(1.05);
+  }
+
+  .profile-button img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-picture {
+    border-radius: 50%;
   }
 
   .filter-overlay {
