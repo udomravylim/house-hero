@@ -25,6 +25,7 @@
   let showFilters = false;
   let filterPriority = '';
   let filterCompleted = '';
+  let filterDifficulty = '';
 
   $: if ($page.url.searchParams.get('add') === 'true' && !showAdd) {
     showAdd = true;
@@ -77,7 +78,6 @@
       availableUsers = [];
     }
 
-    // Fetch current user's profile picture
     if (currentUser) {
       try {
         const { data: profile } = await supabase
@@ -121,20 +121,21 @@
       else if (filterCompleted === 'uncompleted') filtered = filtered.filter(t => !t.completed);
     }
 
+    if (filterDifficulty) {
+      filtered = filtered.filter(t => (t.difficulty || '').toLowerCase() === filterDifficulty);
+    }
+
     const priorityOrder = { high: 0, medium: 1, low: 2 };
 
     return filtered.sort((a, b) => {
-      // First, sort by completion status (incomplete first)
-      // Convert boolean to number: false = 0, true = 1
       const aCompleted = a.completed ? 1 : 0;
       const bCompleted = b.completed ? 1 : 0;
       
       if (aCompleted !== bCompleted) {
-        return aCompleted - bCompleted; // 0 (incomplete) comes before 1 (completed)
+        return aCompleted - bCompleted;
       }
       
-      // If same completion status, sort by priority
-      const aPriority = priorityOrder[a.priority] ?? 1; // Default to medium if undefined
+      const aPriority = priorityOrder[a.priority] ?? 1;
       const bPriority = priorityOrder[b.priority] ?? 1;
 
       if (aPriority !== bPriority) return aPriority - bPriority;
@@ -152,13 +153,11 @@
     const task = $tasks.find(t => t.id === id);
     if (task) {
       const newCompletedStatus = !task.completed;
-      // Optimistically update the UI immediately
       tasks.update(currentTasks => 
         currentTasks.map(t => 
           t.id === id ? { ...t, completed: newCompletedStatus } : t
         )
       );
-      // Then update in the background
       toggleTaskCompletion(id, newCompletedStatus);
     }
   }
@@ -333,8 +332,17 @@
           </div>
         </label>
 
+        <label class="filter-group">
+          <div class="filter-label">Difficulty</div>
+          <div class="difficulty-options">
+            <button class:active={filterDifficulty === 'hard'} on:click={() => filterDifficulty = filterDifficulty === 'hard' ? '' : 'hard'}>Hard</button>
+            <button class:active={filterDifficulty === 'medium'} on:click={() => filterDifficulty = filterDifficulty === 'medium' ? '' : 'medium'}>Medium</button>
+            <button class:active={filterDifficulty === 'easy'} on:click={() => filterDifficulty = filterDifficulty === 'easy' ? '' : 'easy'}>Easy</button>
+          </div>
+        </label>
+
         <div class="filter-actions">
-          <button class="clear-btn" on:click={() => { filterPriority = ''; filterCompleted = ''; }}>Clear</button>
+          <button class="clear-btn" on:click={() => { filterPriority = ''; filterCompleted = ''; filterDifficulty = ''; }}>Clear</button>
           <button class="apply-btn" on:click={() => (showFilters = false)}>Apply</button>
         </div>
       </div>
@@ -394,11 +402,7 @@
     align-items: center;
     margin-bottom: 18px;
   }
-  :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-}
-  
+
   h1 {
     font-size: 32px;
     font-weight: 800;
@@ -589,19 +593,17 @@
     cursor: pointer;
   }
 
- .filter-content {
-  /* width: 100%; */
-  max-width: 420px;
-  margin: 0 auto;
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  animation: slideIn 0.2s ease-out;
-}
-
+  .filter-content {
+    max-width: 420px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: slideIn 0.2s ease-out;
+  }
 
   @keyframes slideIn {
     from { transform: translateY(20px); opacity: 0; }
@@ -621,13 +623,15 @@
   }
 
   .priority-options,
-  .due-options {
+  .due-options,
+  .difficulty-options {
     display: flex;
     gap: 8px;
   }
 
   .priority-options button,
-  .due-options button {
+  .due-options button,
+  .difficulty-options button {
     padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid #ddd;
@@ -637,7 +641,8 @@
   }
 
   .priority-options button.active,
-  .due-options button.active {
+  .due-options button.active,
+  .difficulty-options button.active {
     background: #222;
     color: white;
     border-color: #222;
