@@ -19,6 +19,9 @@
   let email = '';
   let household_name = '';
   let household_admin = '';
+  let household_id = null;
+  let householdMembers = [];
+  let loadingMembers = false;
   let profilePictureUrl = null;
   let uploadingPicture = false;
 
@@ -88,6 +91,8 @@
       }
 
       if (householdMember) {
+        household_id = householdMember.household_id;
+        
         // Handle households as object (from join) or array
         const household = Array.isArray(householdMember.households) 
           ? householdMember.households[0] 
@@ -113,6 +118,9 @@
             }
           }
         }
+        
+        // Fetch all household members
+        await fetchHouseholdMembers(householdMember.household_id);
       }
     } catch (err) {
       console.error('Profile load error', err);
@@ -259,9 +267,63 @@
     }
   }
 
+  // Fetch all household members
+  async function fetchHouseholdMembers(hId) {
+    if (!hId) return;
+    
+    try {
+      loadingMembers = true;
+      
+      // Fetch all members of the household with their profile pictures
+      const { data: members, error: membersError } = await supabase
+        .from('household_members')
+        .select('user_id, user_email, user_name, is_admin, profile_picture_url, joined_at')
+        .eq('household_id', hId)
+        .order('is_admin', { ascending: false })
+        .order('joined_at', { ascending: true });
+
+      if (membersError) {
+        console.error('Error fetching household members:', membersError);
+        return;
+      }
+
+      if (members && members.length > 0) {
+        // Format members data
+        householdMembers = members.map(member => ({
+          id: member.user_id,
+          email: member.user_email,
+          name: member.user_name || member.user_email.split('@')[0],
+          isAdmin: member.is_admin || false,
+          avatar: member.profile_picture_url || null,
+          isCurrentUser: member.user_id === userId,
+          joinedAt: member.joined_at
+        }));
+      }
+    } catch (err) {
+      console.error('Error fetching household members:', err);
+    } finally {
+      loadingMembers = false;
+    }
+  }
+
   // Get profile picture source (use uploaded picture or default icon)
   function getProfilePictureSrc() {
     return profilePictureUrl || profileIcon;
+  }
+
+  // Get member avatar or default icon
+  function getMemberAvatar(member) {
+    return member.avatar || profileIcon;
+  }
+
+  // Format date
+  function formatDate(dateString) {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
   }
 </script>
 
@@ -346,6 +408,43 @@
       </div>
 
       {#if household_name}
+        <!-- Household Members Section -->
+        <div class="members-section">
+          <div class="info-label" style="margin-top: 20px; margin-bottom: 12px;">Household Members ({householdMembers.length})</div>
+          {#if loadingMembers}
+            <div class="loading-members">Loading members...</div>
+          {:else if householdMembers.length === 0}
+            <div class="no-members">No members found</div>
+          {:else}
+            <div class="members-list">
+              {#each householdMembers as member}
+                <div class="member-item" class:current-user={member.isCurrentUser}>
+                  <div class="member-avatar">
+                    <img src={getMemberAvatar(member)} alt={member.name} />
+                  </div>
+                  <div class="member-info">
+                    <div class="member-name-row">
+                      <div class="member-name">
+                        {member.name}
+                        {#if member.isCurrentUser}
+                          <span class="you-badge">(You)</span>
+                        {/if}
+                      </div>
+                      {#if member.isAdmin}
+                        <span class="admin-badge">Admin</span>
+                      {/if}
+                    </div>
+                    <div class="member-email">{member.email}</div>
+                    {#if member.joinedAt}
+                      <div class="member-joined">Joined {formatDate(member.joinedAt)}</div>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
         <div class="card-actions">
           <button class="action-btn danger" on:click={showLeaveHouseholdModal}>Leave Household</button>
         </div>
@@ -692,5 +791,121 @@
 
   .modal-btn.confirm:hover:not(:disabled) {
     background: #c62828;
+  }
+
+  /* Household Members Styles */
+  .members-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+  }
+
+  .loading-members,
+  .no-members {
+    text-align: center;
+    padding: 16px;
+    color: #666;
+    font-size: 14px;
+  }
+
+  .members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .member-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: white;
+    border-radius: 12px;
+    transition: background 0.2s;
+    border: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .member-item:hover {
+    background: #fafafa;
+    border-color: rgba(0,0,0,0.1);
+  }
+
+  .member-item.current-user {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+  }
+
+  .member-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(0,0,0,0.05);
+  }
+
+  .member-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .member-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .member-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+
+  .member-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #222;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .you-badge {
+    font-size: 12px;
+    font-weight: 500;
+    color: #1976d2;
+  }
+
+  .admin-badge {
+    font-size: 11px;
+    font-weight: 600;
+    background: #ffd54f;
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .member-email {
+    font-size: 13px;
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 2px;
+  }
+
+  .member-joined {
+    font-size: 11px;
+    color: #999;
+    font-style: italic;
   }
 </style>

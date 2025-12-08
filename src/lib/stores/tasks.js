@@ -35,14 +35,72 @@ async function updateUserPoints(householdId, userEmail, points) {
   }
 
   try {
-    const { error: pointsError } = await supabase.rpc('add_user_points', {
+    // First, try using the RPC function
+    const { data, error: pointsError } = await supabase.rpc('add_user_points', {
       p_household_id: householdId,
       p_user_email: userEmail,
       p_points: points
     });
 
     if (pointsError) {
-      console.error('Error updating user points:', pointsError);
+      // Fallback: Update user_points table directly
+      // First, get the user_id from household_members
+      const { data: memberData, error: memberError } = await supabase
+        .from('household_members')
+        .select('user_id')
+        .eq('household_id', householdId)
+        .eq('user_email', userEmail)
+        .single();
+
+      if (memberError || !memberData) {
+        return;
+      }
+
+      // Check if user_points record exists
+      const { data: existingPoints, error: checkError } = await supabase
+        .from('user_points')
+        .select('total_points')
+        .eq('household_id', householdId)
+        .eq('user_id', memberData.user_id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        return;
+      }
+
+      if (existingPoints) {
+        // Update existing record - ensure points never go below 0
+        const newTotal = Math.max(0, existingPoints.total_points + points);
+        
+        const { error: updateError } = await supabase
+          .from('user_points')
+          .update({ 
+            total_points: newTotal,
+            updated_at: new Date().toISOString()
+          })
+          .eq('household_id', householdId)
+          .eq('user_id', memberData.user_id);
+
+        if (updateError) {
+          return;
+        }
+      } else {
+        // Insert new record - ensure points never go below 0
+        const initialPoints = Math.max(0, points);
+        
+        const { error: insertError } = await supabase
+          .from('user_points')
+          .insert({
+            household_id: householdId,
+            user_id: memberData.user_id,
+            user_email: userEmail,
+            total_points: initialPoints
+          });
+
+        if (insertError) {
+          return;
+        }
+      }
     }
   } catch (err) {
     console.error('Error updating user points:', err);
@@ -395,7 +453,7 @@ export async function deleteTask(taskId) {
 }
 
 // Toggle task completion
-export async function toggleTaskCompletion(taskId, completed) {
+export async function toggleTaskCompletion(taskId, completed, previousCompleted = undefined) {
   // Don't set loading to avoid UI flicker since we're doing optimistic updates
   error.set(null);
   
@@ -410,7 +468,9 @@ export async function toggleTaskCompletion(taskId, completed) {
     }
 
     // Check if completion status is actually changing
-    const wasCompleted = Boolean(task.completed);
+    // Use previousCompleted if provided (to avoid race condition with optimistic update)
+    // Otherwise fall back to task.completed from store
+    const wasCompleted = previousCompleted !== undefined ? Boolean(previousCompleted) : Boolean(task.completed);
     const isNowCompleted = Boolean(completed);
 
     // Update database first (faster) - don't wait for points update
@@ -418,8 +478,8 @@ export async function toggleTaskCompletion(taskId, completed) {
     
     // Update points in background (non-blocking)
     if (wasCompleted !== isNowCompleted) {
-      updatePointsInBackground(task, isNowCompleted).catch(err => {
-        console.error('Error updating points in background:', err);
+      updatePointsInBackground(task, isNowCompleted).catch(() => {
+        // Silently handle errors - don't break task completion
       });
     }
 
@@ -447,23 +507,31 @@ export async function toggleTaskCompletion(taskId, completed) {
 async function updatePointsInBackground(task, isNowCompleted) {
   const points = calculatePoints(task.priority || 'medium', task.difficulty || 'hard');
   
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return;
+  }
 
-  const { data: householdMember } = await supabase
+  const { data: householdMember, error: householdError } = await supabase
     .from('household_members')
     .select('household_id')
     .eq('user_id', user.id)
     .single();
 
-  if (householdMember && task.assignee_email && task.assignee_email !== 'unassigned') {
-    if (isNowCompleted) {
-      // Award points when task is completed
-      await updateUserPoints(householdMember.household_id, task.assignee_email, points);
-    } else {
-      // Deduct points when task is uncompleted
-      await updateUserPoints(householdMember.household_id, task.assignee_email, -points);
-    }
+  if (householdError || !householdMember) {
+    return;
+  }
+
+  if (!task.assignee_email || task.assignee_email === 'unassigned') {
+    return;
+  }
+
+  if (isNowCompleted) {
+    // Award points when task is completed
+    await updateUserPoints(householdMember.household_id, task.assignee_email, points);
+  } else {
+    // Deduct points when task is uncompleted (in case of accidental check)
+    await updateUserPoints(householdMember.household_id, task.assignee_email, -points);
   }
 }
 

@@ -1,47 +1,37 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
   import BottomNav from '$lib/components/BottomNav.svelte';
   import FaCrown from 'svelte-icons/fa/FaCrown.svelte';
   import FaFire from 'svelte-icons/fa/FaFire.svelte';
   import FaMedal from 'svelte-icons/fa/FaMedal.svelte';
+  import { 
+    members, 
+    loading, 
+    error, 
+    householdGoal, 
+    fetchLeaderboard, 
+    subscribeToLeaderboardUpdates,
+    unsubscribeFromLeaderboardUpdates 
+  } from '$lib/stores/leaderboard.js';
 
   let view = 'individual';
 
-  let members = [
-    {
-      id: 1,
-      name: 'Russell',
-      points: 320,
-      streak: 7,
-      badges: ['Clean Machine', 'Early Bird'],
-      avatar: null
-    },
-    {
-      id: 2,
-      name: 'Alex',
-      points: 275,
-      streak: 4,
-      badges: ['Power Week'],
-      avatar: null
-    },
-    {
-      id: 3,
-      name: 'Taylor',
-      points: 200,
-      streak: 2,
-      badges: [],
-      avatar: null
-    }
-  ];
-
-  const householdGoal = 1000;
-  let householdTotal = members.reduce((s, m) => s + m.points, 0);
-  let topContributor = members[0].name;
-
-  $: sortedMembers = [...members].sort((a, b) => b.points - a.points);
+  $: sortedMembers = $members;
+  $: householdTotal = $members.reduce((s, m) => s + m.points, 0);
+  $: topContributor = $members.length > 0 ? $members[0].name : '';
 
   function switchTo(v) {
     view = v;
   }
+
+  onMount(async () => {
+    await fetchLeaderboard();
+    await subscribeToLeaderboardUpdates();
+  });
+
+  onDestroy(() => {
+    unsubscribeFromLeaderboardUpdates();
+  });
 </script>
 
 <main>
@@ -60,8 +50,23 @@
     </div>
   </header>
 
+  <p class="motivational-text">Keep completing tasks to earn badges and climb the leaderboard!</p>
+
   <section class="list">
-    {#if view === 'individual'}
+    {#if $loading}
+      <div class="loading-state">
+        <p>Loading leaderboard...</p>
+      </div>
+    {:else if $error}
+      <div class="error-state">
+        <p>{$error}</p>
+        <button on:click={fetchLeaderboard}>Retry</button>
+      </div>
+    {:else if sortedMembers.length === 0}
+      <div class="empty-state">
+        <p>No members found. Join or create a household to see the leaderboard!</p>
+      </div>
+    {:else if view === 'individual'}
       <div class="cards">
         {#each sortedMembers as member, i}
           <article class="member-card">
@@ -84,7 +89,7 @@
                 <div class="meta-row">
                   <div class="streak">
                     <div style="width: 14px; height: 14px; display: inline-flex; align-items: center; margin-right: 6px;"><FaFire /></div>
-                    <span>{member.streak}-day</span>
+                    <span>{member.streak}-days</span>
                   </div>
                   <div class="badge-list">
                     {#each member.badges as b}
@@ -95,18 +100,22 @@
               </div>
             </div>
 
-            <p class="member-note">Any notes or recent achievement summaries can appear here.</p>
+            <p class="member-note">
+              {#if member.badges.length > 0}
+                Earned {member.badges.length} badge{member.badges.length > 1 ? 's' : ''}!
+              {/if}
+            </p>
           </article>
         {/each}
       </div>
     {:else}
       <div class="household-card">
         <div class="house-summary">
-          <h2>This Week’s Progress</h2>
-          <p class="house-stats">{householdTotal} / {householdGoal} pts</p>
+          <h2>This Week's Progress</h2>
+          <p class="house-stats">{householdTotal} / {$householdGoal} pts</p>
 
           <div class="progress-bar">
-            <div class="progress-fill" style="width: {Math.min((householdTotal / householdGoal) * 100, 100)}%"></div>
+            <div class="progress-fill" style="width: {Math.min((householdTotal / $householdGoal) * 100, 100)}%"></div>
           </div>
 
           <div class="house-meta">
@@ -129,10 +138,6 @@
             <div class="member-compact">
               <div class="m-left">
                 <div class="mc-name">{member.name}</div>
-                <div class="mc-streak">
-                  <div style="width: 12px; height: 12px; display: inline-flex; align-items: center; margin-right: 4px;"><FaFire /></div>
-                  {member.streak}-day
-                </div>
               </div>
               <div class="m-right">
                 <div class="mc-points">{member.points} pts</div>
@@ -165,6 +170,14 @@
     font-size: 32px;
     font-weight: 800;
     margin: 0;
+  }
+
+  .motivational-text {
+    text-align: center;
+    color: #666;
+    font-size: 0.95rem;
+    margin: 0 0 18px 0;
+    padding: 0 10px;
   }
 
   .toggle-wrap {
@@ -423,15 +436,32 @@
     font-weight: 700;
   }
 
-  .mc-streak {
-    font-size: 0.85rem;
-    opacity: 0.95;
-  }
-
   .mc-points {
     font-weight: 700;
+    font-size: 1rem;
   }
 
+  .loading-state,
+  .error-state,
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #666;
+  }
+
+  .error-state button {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background: #ffd54f;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .error-state button:hover {
+    background: #ffc107;
+  }
 
   
   @media (max-width: 420px) {
