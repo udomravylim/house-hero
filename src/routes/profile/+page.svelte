@@ -222,7 +222,7 @@
 
       const publicUrl = urlData.publicUrl;
 
-      // Update profile in database
+      // Update profile in database (trigger will sync to household_members)
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert({
@@ -234,6 +234,18 @@
         });
 
       if (updateError) throw updateError;
+      
+      // Also explicitly update household_members to ensure it's synced immediately
+      // (the trigger should handle this, but this ensures it's updated right away)
+      const { error: memberUpdateError } = await supabase
+        .from('household_members')
+        .update({ profile_picture_url: publicUrl })
+        .eq('user_id', userId);
+      
+      if (memberUpdateError) {
+        console.warn('Warning: Could not update household_members profile picture:', memberUpdateError);
+        // Don't throw - the profile update succeeded, and the trigger should handle it
+      }
 
       // Update local state
       profilePictureUrl = publicUrl;
