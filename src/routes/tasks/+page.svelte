@@ -32,17 +32,8 @@
     goto('/tasks', { replaceState: true });
   }
 
-  $: if (showAdd && availableUsers.length === 0 && authChecked) {
-    getUsers().then(users => {
-      availableUsers = users;
-    }).catch(err => {
-      console.error('Error loading users:', err);
-    });
-  }
 
   onMount(async () => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-
     if (!$user) {
       goto('/?message=login-required');
       return;
@@ -99,8 +90,6 @@
     goto('/?message=login-required');
   }
 
-  $: otherUsers = availableUsers;
-
   $: filteredTasks = (() => {
     const currentUser = $user?.email;
     if (!currentUser || !$tasks || $tasks.length === 0) return [];
@@ -109,7 +98,7 @@
       if (view === 'all') return true;
       if (view === 'mine') return task.assignee_email === currentUser;
       if (view === 'unassigned') return task.assignee_email === 'unassigned' || !task.assignee_email;
-      return true;
+      return false;
     });
 
     if (filterPriority) {
@@ -152,13 +141,14 @@
     const id = ev.detail.id;
     const task = $tasks.find(t => t.id === id);
     if (task) {
+      const oldCompletedStatus = task.completed;
       const newCompletedStatus = !task.completed;
       tasks.update(currentTasks => 
         currentTasks.map(t => 
           t.id === id ? { ...t, completed: newCompletedStatus } : t
         )
       );
-      toggleTaskCompletion(id, newCompletedStatus);
+      toggleTaskCompletion(id, newCompletedStatus, oldCompletedStatus);
     }
   }
 
@@ -220,19 +210,9 @@
     }
   }
 
-  async function handleLogout() {
-    try {
-      await supabase.auth.signOut();
-      goto('/');
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-  }
 </script>
 
 <main>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-
   <header>
     <h1>Hi {getUserDisplayName($user)}!</h1>
     <button type="button" class="profile-button" aria-label="Profile" on:click={() => goto('/profile')}>
@@ -269,7 +249,7 @@
       <textarea placeholder="Description (optional)" bind:value={newDescription}></textarea>
 
       <div class="date-input-wrapper">
-        <input type="date" bind:value={newDueDate} class:has-value={newDueDate} />
+        <input type="date" bind:value={newDueDate} />
         {#if !newDueDate}
           <span class="date-placeholder">Select due date</span>
         {/if}
@@ -279,7 +259,7 @@
         <option value="">Assign task to someone</option>
         <option value="unassigned">Unassigned</option>
         <option value="me">Assign to me</option>
-        {#each otherUsers as user}
+        {#each availableUsers as user}
           <option value={user.email}>Assign to {user.name}</option>
         {/each}
       </select>
@@ -306,7 +286,17 @@
   {/if}
 
   {#if showFilters}
-    <div class="filter-overlay" on:click={() => (showFilters = false)}></div>
+    <div 
+      class="filter-overlay" 
+      role="button"
+      tabindex="0"
+      on:click={() => (showFilters = false)}
+      on:keydown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+          showFilters = false;
+        }
+      }}
+    ></div>
 
     <div class="filter-sheet" role="dialog" aria-modal="true" aria-label="Filters">
       <div class="filter-header">
@@ -390,10 +380,6 @@
   :root {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
       Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  }
-
-  body {
-    font-family: inherit;
   }
 
   header {
