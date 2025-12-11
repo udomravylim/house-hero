@@ -441,6 +441,8 @@
     background: #fff5ef;
     padding: 15px;
     border-radius: 8px;
+    background: #f3f3f3;
+    border-left: 4px solid #6b7280;
   }
 
   .add-form input,
