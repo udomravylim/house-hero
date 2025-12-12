@@ -40,7 +40,7 @@
       if (signUpError) {
         error = signUpError.message;
       } else {
-        alert('Signup successful! Please check your email to confirm your account.');
+        alert('Signup successful! Welcome to House Hero');
         goto('/');
       }
     } catch (err) {
