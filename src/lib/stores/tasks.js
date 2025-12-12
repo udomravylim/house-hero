@@ -138,7 +138,8 @@ export async function fetchTasks() {
       .eq('household_id', householdMember.household_id)
       .order('created_at', { ascending: false });
 
-    // Fetch profile pictures for assignees and creators from household_members
+    // Fetch profile pictures for assignees and creators
+    // First try household_members, then fallback to profiles table
     if (data && data.length > 0) {
       // Get all household members with their profile pictures
       const { data: allMembers } = await supabase
@@ -146,12 +147,38 @@ export async function fetchTasks() {
         .select('user_id, user_email, profile_picture_url')
         .eq('household_id', householdMember.household_id);
 
+      // Get all user IDs from household members
+      const userIds = allMembers?.map(m => m.user_id) || [];
+      
+      // Fetch profile pictures from profiles table as well (fallback/supplement)
+      let profilesMap = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, profile_picture_url')
+          .in('id', userIds);
+        
+        if (profiles) {
+          profiles.forEach(profile => {
+            if (profile.profile_picture_url) {
+              profilesMap[profile.id] = profile.profile_picture_url;
+            }
+          });
+        }
+      }
+
       if (allMembers && allMembers.length > 0) {
-        // Create email to profile picture mapping from household_members
+        // Create email to profile picture mapping
+        // Prefer household_members, but fallback to profiles table
         const emailToPicture = {};
+        const userIdToEmail = {};
+        
         allMembers.forEach(member => {
-          if (member.profile_picture_url) {
-            emailToPicture[member.user_email] = member.profile_picture_url;
+          userIdToEmail[member.user_id] = member.user_email;
+          // Use household_members profile_picture_url if available, otherwise check profiles table
+          const pictureUrl = member.profile_picture_url || profilesMap[member.user_id] || null;
+          if (pictureUrl) {
+            emailToPicture[member.user_email] = pictureUrl;
           }
         });
 
@@ -221,25 +248,37 @@ export async function createTask(taskData) {
     const assigneeInitial = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_initial || userInitial);
     const assigneeName = taskData.assignee_email === 'unassigned' ? null : (taskData.assignee_name || userName);
 
-    // Fetch profile picture URLs for assignee and creator from household_members
+    // Fetch profile picture URLs for assignee and creator
+    // Check both household_members and profiles tables
     let assigneePictureUrl = null;
     let createdByPictureUrl = null;
 
-    // Get assignee profile picture if assigned (from household_members)
+    // Get assignee profile picture if assigned
     if (assigneeEmail && assigneeEmail !== 'unassigned') {
       const { data: assigneeMember } = await supabase
         .from('household_members')
-        .select('profile_picture_url')
+        .select('user_id, profile_picture_url')
         .eq('household_id', householdMember.household_id)
         .eq('user_email', assigneeEmail)
         .maybeSingle();
       
+      // Use household_members profile_picture_url if available, otherwise check profiles
       if (assigneeMember?.profile_picture_url) {
         assigneePictureUrl = assigneeMember.profile_picture_url;
+      } else if (assigneeMember?.user_id) {
+        const { data: assigneeProfile } = await supabase
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', assigneeMember.user_id)
+          .maybeSingle();
+        
+        if (assigneeProfile?.profile_picture_url) {
+          assigneePictureUrl = assigneeProfile.profile_picture_url;
+        }
       }
     }
 
-    // Get creator profile picture from household_members
+    // Get creator profile picture
     const { data: creatorMember } = await supabase
       .from('household_members')
       .select('profile_picture_url')
@@ -247,8 +286,19 @@ export async function createTask(taskData) {
       .eq('user_id', user.id)
       .maybeSingle();
     
+    // Use household_members profile_picture_url if available, otherwise check profiles
     if (creatorMember?.profile_picture_url) {
       createdByPictureUrl = creatorMember.profile_picture_url;
+    } else {
+      const { data: creatorProfile } = await supabase
+        .from('profiles')
+        .select('profile_picture_url')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      if (creatorProfile?.profile_picture_url) {
+        createdByPictureUrl = creatorProfile.profile_picture_url;
+      }
     }
 
     const { data, error: insertError } = await supabase
@@ -327,7 +377,7 @@ export async function updateTask(taskId, updates) {
           updates.assignee_name = userName;
           updates.assignee_initial = userName.charAt(0).toUpperCase();
           
-          // Fetch current user's profile picture from household_members
+          // Fetch current user's profile picture (check both tables)
           const { data: currentUserMember } = await supabase
             .from('household_members')
             .select('profile_picture_url')
@@ -338,7 +388,14 @@ export async function updateTask(taskId, updates) {
           if (currentUserMember?.profile_picture_url) {
             updates.assignee_picture_url = currentUserMember.profile_picture_url;
           } else {
-            updates.assignee_picture_url = null;
+            // Fallback to profiles table
+            const { data: currentUserProfile } = await supabase
+              .from('profiles')
+              .select('profile_picture_url')
+              .eq('id', user.id)
+              .maybeSingle();
+            
+            updates.assignee_picture_url = currentUserProfile?.profile_picture_url || null;
           }
         } else {
           // Find the assignee member info (including profile picture)
@@ -354,10 +411,18 @@ export async function updateTask(taskId, updates) {
             updates.assignee_name = assigneeName;
             updates.assignee_initial = assigneeName.charAt(0).toUpperCase();
             
-            // Fetch assignee profile picture from household_members
-            // The profile_picture_url is already in assigneeMember from the query above
+            // Fetch assignee profile picture (check both tables)
             if (assigneeMember.profile_picture_url) {
               updates.assignee_picture_url = assigneeMember.profile_picture_url;
+            } else if (assigneeMember.user_id) {
+              // Fallback to profiles table
+              const { data: assigneeProfile } = await supabase
+                .from('profiles')
+                .select('profile_picture_url')
+                .eq('id', assigneeMember.user_id)
+                .maybeSingle();
+              
+              updates.assignee_picture_url = assigneeProfile?.profile_picture_url || null;
             } else {
               updates.assignee_picture_url = null;
             }

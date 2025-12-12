@@ -16,6 +16,7 @@ ON household_members(profile_picture_url)
 WHERE profile_picture_url IS NOT NULL;
 
 -- Step 3: Create function to sync profile picture from profiles to household_members
+-- Using SECURITY DEFINER to ensure it can update household_members even with RLS enabled
 CREATE OR REPLACE FUNCTION sync_profile_picture_to_household_members()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -32,8 +33,13 @@ BEGIN
   END IF;
   
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Log the error but don't fail the profile update
+    RAISE WARNING 'Error syncing profile picture to household_members for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Step 4: Create trigger to automatically sync profile pictures
 DROP TRIGGER IF EXISTS sync_profile_picture_trigger ON profiles;
